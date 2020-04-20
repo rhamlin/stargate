@@ -1,0 +1,44 @@
+
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: stargate
+  namespace: appstax-staging
+spec:
+  ports:
+  - port: 8080
+    name: rest
+  selector:
+    app: stargate
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: stargate
+  namespace: appstax-staging
+spec:
+  selector:
+    matchLabels:
+      app: stargate # has to match .spec.template.metadata.labels
+  serviceName: stargate
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: stargate
+    spec:
+      containers:
+        - name: stargate
+          image: "592537962371.dkr.ecr.us-east-2.amazonaws.com/stargate:1.0"
+          imagePullPolicy: Always
+          env: [ ]
+          command: [ "java" ]
+          args: [ "-cp", "target/appstax-lite-1.0-SNAPSHOT-jar-with-dependencies.jar", "appstax.service.package", "/stargate/src/main/resources/prod.conf" ]
+          ports:
+            - containerPort: 8080
+
+
+

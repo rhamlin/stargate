@@ -1,0 +1,60 @@
+
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: cassandra
+  namespace: appstax-staging
+spec:
+  clusterIP: None
+  ports:
+  - port: 9042
+    name: client
+  selector:
+    app: cassandra
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cassandra
+  namespace: appstax-staging
+spec:
+  selector:
+    matchLabels:
+      app: cassandra # has to match .spec.template.metadata.labels
+  serviceName: cassandra
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: cassandra
+    spec:
+      securityContext:
+        fsGroup: 2000
+      containers:
+        - name: cassandra
+          image: datastax/dse-server:6.8.0
+          env:
+            - name: DS_LICENSE
+              value: accept
+            - name: SEEDS
+              value: "cassandra-0.cassandra.appstax-staging,cassandra-1.cassandra.appstax-staging,cassandra-2.cassandra.appstax-staging"  
+          args: [ ]
+          ports:
+            - containerPort: 9042
+          volumeMounts:
+            - name: cassandra-storage-volume
+              mountPath: /var/lib/cassandra
+  volumeClaimTemplates:
+  - metadata:
+      name: cassandra-storage-volume
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "gp2"
+      resources:
+        requests:
+          storage: 5Gi
+
+
