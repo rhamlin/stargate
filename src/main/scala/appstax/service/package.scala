@@ -48,35 +48,52 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
     results.take(pageSize, executor).map(truncateAsyncLists(_, pageSize))(executor)
   }
 
+  def postSchema(appName: String, input: String, resp: HttpServletResponse): Unit = {
+    val model = appstax.schema.outputModel(appstax.model.parser.parseModel(input))
+    val session = newSession(appName)
+    implicit val ec: ExecutionContext = executor
+    Await.ready(Future.sequence(model.tables.map(cassandra.create(session, _))), Duration.Inf)
+    apps.put(appName, (session, model))
+    resp.getWriter.write(model.toString)
+  }
+
+  def runPredefinedQuery(appName: String, queryName: String, input: String, resp: HttpServletResponse): Unit = {
+    val (session, model) = apps.get(appName)
+    val payloadMap = util.javaToScala(om.readValue(input, classOf[Object])).asInstanceOf[Map[String,Object]]
+    val query = model.input.queries(queryName)
+    val runtimePayload = appstax.model.queries.transform(query, payloadMap)
+    runQuery(appName, query.entityName, "get", runtimePayload, resp)
+  }
+
+  def runQuery(appName: String, entity: String, op: String, input: String, resp: HttpServletResponse): Unit = {
+    val payload = util.javaToScala(om.readValue(input, classOf[Object]))
+    runQuery(appName, entity, op, payload, resp)
+  }
+  def runQuery(appName: String, entity: String, op: String, payload: Object, resp: HttpServletResponse): Unit = {
+    val (session, model) = apps.get(appName)
+    val payloadMap = Try(payload.asInstanceOf[Map[String,Object]])
+    println(payload)
+    val result: Future[Object] = op match {
+      case "get" => truncateAsyncLists(model.getWrapper(entity)(session, payloadMap.get, executor), 20)
+      case "create" => model.createWrapper(entity)(session, payload, executor)
+      case "update" => model.updateWrapper(entity)(session, payloadMap.get, executor)
+      case "delete" => model.deleteWrapper(entity)(session, payloadMap.get, executor)
+      case _ => Future.failed(new RuntimeException(s"unsupported op: ${op}"))
+    }
+    println(op, Await.result(result, Duration.Inf))
+    resp.getWriter.write(om.writeValueAsString(util.scalaToJava(Await.result(result, Duration.Inf))))
+  }
+
   override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
     val path = req.getServletPath.split("/").toList.filter(_.nonEmpty)
     val appName = path(0)
     val input = new String(req.getInputStream.readAllBytes())
     if(path.length == 1) {
-      Try(apps.get(appName)._1.close)
-      val model = appstax.schema.outputModel(appstax.model.parser.parseModel(input))
-      val session = newSession(appName)
-      implicit val ec: ExecutionContext = executor
-      Await.ready(Future.sequence(model.tables.map(cassandra.create(session, _))), Duration.Inf)
-      apps.put(appName, (session, model))
-      resp.getWriter.write(model.toString)
-
+      postSchema(appName, input, resp)
+    } else if(path.length == 2) {
+      runPredefinedQuery(appName, path(1), input, resp)
     } else if(path.length == 3) {
-      val (session, model) = apps.get(appName)
-      val entity = path(1)
-      val op = path(2)
-      val payload = util.javaToScala(om.readValue(input, classOf[Object]))
-      val payloadMap = Try(payload.asInstanceOf[Map[String,Object]])
-      println(payload)
-      val result: Future[Object] = op match {
-        case "get" => truncateAsyncLists(model.getWrapper(entity)(session, payloadMap.get, executor), 20)
-        case "create" => model.createWrapper(entity)(session, payload, executor)
-        case "update" => model.updateWrapper(entity)(session, payloadMap.get, executor)
-        case "delete" => model.deleteWrapper(entity)(session, payloadMap.get, executor)
-        case _ => Future.failed(new RuntimeException(s"unsupported op: ${op}"))
-      }
-      println(op, Await.result(result, Duration.Inf))
-      resp.getWriter.write(om.writeValueAsString(util.scalaToJava(Await.result(result, Duration.Inf))))
+      runQuery(appName, path(1), path(2), input, resp)
     }
   }
 }

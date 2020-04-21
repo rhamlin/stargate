@@ -12,7 +12,7 @@ def printResult(result):
 
 
 def push():
-    resp = requests.post(url + "/test", data=str(open("projects/appstax-lite/src/main/resources/schema.conf").read()))
+    resp = requests.post(url + "/test", data=str(open("/data/projects/stargate/src/main/resources/schema.conf").read()))
     if resp.status_code != 200:
         push()
 
@@ -71,6 +71,15 @@ def update():
                 "street":"other st"}}})
     printResult(result)
 
+def predefinedGet(name = "Steve"):
+    result = requests.post(url + "/test/customerByFirstName", json={
+        "-match":{
+            "customerName": name
+        }
+    })
+    printResult(result)
+
+
 
 def demo1():
     push()
@@ -83,4 +92,7 @@ def demo1():
     print("\n\ntest 3")
     create()
     get()
+    print("\n\ntest 4")
+    predefinedGet()
+
 
