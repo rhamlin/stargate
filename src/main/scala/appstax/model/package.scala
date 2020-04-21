@@ -48,6 +48,7 @@ package object model {
   case class ScalarCondition[A](field: String, comparison: ScalarComparison.Value, argument: A) {
     def named: NamedCondition = NamedCondition(field, comparison)
     def trimRelationPath: ScalarCondition[A] = ScalarCondition(field.split(schema.RELATION_SPLIT_REGEX).last, comparison, argument)
+    def replaceArgument[A2](arg: A2) = ScalarCondition(field, comparison, arg)
   }
 
   type Where = List[ScalarCondition[String]]
@@ -56,6 +57,7 @@ package object model {
 
   case class InputModel(
     entities: Map[String, Entity],
+    queries: Map[String, model.queries.GetQuery],
     conditions: Map[String, List[NamedConditions]]
   ) {
     // TODO - either remove this, or add support for specifying in config+parser, create default unknown value
@@ -71,15 +73,15 @@ package object model {
     def tables: List[CassandraTable] = (entityTables.values.flatten ++ relationTables.values).toList
 
     def getWrapper(entityName: String)(session: CqlSession, payload: Map[String,Object], executor: ExecutionContext): AsyncList[Map[String, Object]] =
-      queries.get(this, entityName, payload, session, executor)
+      appstax.queries.get(this, entityName, payload, session, executor)
     def mutationWrapper(entityName: String)(session: CqlSession, payload: Map[String,Object], executor: ExecutionContext): Future[List[Map[String, Object]]] =
-      queries.mutation(this, entityName, payload, session, executor)
+      appstax.queries.mutation(this, entityName, payload, session, executor)
     def createWrapper(entityName: String)(session: CqlSession, payload: Object, executor: ExecutionContext): Future[List[Map[String, Object]]] =
-      queries.create(this, entityName, payload, session, executor)
+      appstax.queries.create(this, entityName, payload, session, executor)
     def updateWrapper(entityName: String)(session: CqlSession, payload: Map[String,Object], executor: ExecutionContext): Future[List[Map[String, Object]]] =
-      queries.update(this, entityName, payload, session, executor)
+      appstax.queries.update(this, entityName, payload, session, executor)
     def deleteWrapper(entityName: String)(session: CqlSession, payload: Map[String,Object], executor: ExecutionContext): Future[List[Map[String, Object]]] =
-      queries.delete(this, entityName, payload, session, executor)
+      appstax.queries.delete(this, entityName, payload, session, executor)
   }
 
 }
