@@ -87,6 +87,7 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
     val payload = util.fromJson(input)
     runQuery(appName, entity, op, payload, resp)
   }
+
   def runQuery(appName: String, entity: String, op: String, payload: Object, resp: HttpServletResponse): Unit = {
     val (session, model) = apps.get(appName)
     val payloadMap = Try(payload.asInstanceOf[Map[String,Object]])
@@ -112,6 +113,7 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
     val appName = path(0)
     val input = new String(req.getInputStream.readAllBytes())
     if(path.length == 1) {
+      println("running schema post to " + appName)
       postSchema(appName, input, resp)
     } else if(path.length == 2) {
       runPredefinedQuery(appName, path(1), input, resp)

@@ -14,9 +14,17 @@ buildNumber.properties
 .idea
 *.iml
 
+#eclipse
+.classpath
+.settings
+
 #metal lsp server
 .bloop
 .metals
+
+#vscode
+.vscode
+.project
 
 #virtualenv for demo script
 venv
