@@ -1,9 +1,12 @@
 package appstax
 
 import java.util
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters.mapAsJavaMap
+import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 
 package object util {
 
@@ -21,6 +24,19 @@ package object util {
       case x: List[Object] =>  x.map(scalaToJava).asJava
       case x: Map[Object, Object] => mapAsJavaMap(x.map((kv:(Object,Object)) => (scalaToJava(kv._1), scalaToJava(kv._2))))
       case x => x
+    }
+  }
+
+  def retry[T](value: => T, remaining: Duration, backoff: Duration): Try[T] = {
+    val t0 = System.nanoTime()
+    val result = Try(value)
+    val t1 = System.nanoTime()
+    val nextRemaining = remaining - Duration(t1 - t0, TimeUnit.NANOSECONDS) - backoff
+    if(result.isSuccess || nextRemaining._1 < 0) {
+      result
+    } else {
+      Thread.sleep(backoff.toMillis)
+      retry(value, nextRemaining, backoff)
     }
   }
 

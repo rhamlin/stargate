@@ -13,6 +13,7 @@ import com.typesafe.config.{Config, ConfigFactory}
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.servlet.{ServletHandler, ServletHolder}
 
+import scala.collection.mutable
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
@@ -23,29 +24,13 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
 
   val apps = new ConcurrentHashMap[String, (CqlSession, OutputModel)]()
   val om: ObjectMapper = new ObjectMapper()
-  val executor: ExecutionContext = ExecutionContext.global
+  import AppstaxServlet._
 
   def newSession(keyspace: String): CqlSession = {
-    val contacts = config.getConfig("cassandra").getConfigList("contactPoints").asScala
-    val builder = contacts.foldLeft(CqlSession.builder)((builder, config) => builder.addContactPoint(InetSocketAddress.createUnresolved(config.getString("host"), config.getInt("port"))))
-    val withoutKeyspace = builder.withLocalDatacenter(config.getString("cassandra.dataCenter"))
-    val sessionWithoutKeyspace = withoutKeyspace.build
-    sessionWithoutKeyspace.execute(SchemaBuilder.dropKeyspace(keyspace).ifExists.build)
-    sessionWithoutKeyspace.execute(SchemaBuilder.createKeyspace(keyspace).withSimpleStrategy(config.getInt("cassandra.replication")).build)
-    sessionWithoutKeyspace.close
-    withoutKeyspace.withKeyspace(keyspace).build
-  }
-
-  def truncateAsyncLists(results: Object, pageSize: Int): Object = {
-    results match {
-      case x: AsyncList[Object] => Await.result(x.take(pageSize, executor), Duration.Inf)
-      case x: List[Object] => x.map(truncateAsyncLists(_, pageSize))
-      case x: Map[String,Object] => x.iterator.map(kv => (kv._1, truncateAsyncLists(kv._2, pageSize))).toMap
-      case x => x
-    }
-  }
-  def truncateAsyncLists[T](results: AsyncList[T], pageSize: Int): Future[Object] = {
-    results.take(pageSize, executor).map(truncateAsyncLists(_, pageSize))(executor)
+    val contacts = config.getConfig("cassandra").getConfigList("contactPoints").asScala.toList.map(c => (c.getString("host"), c.getInt("port")))
+    val dataCenter = config.getString("cassandra.dataCenter")
+    val replication = config.getInt("cassandra.replication")
+    cassandra.sessionWithNewKeyspace(contacts, dataCenter, keyspace, replication)
   }
 
   def postSchema(appName: String, input: String, resp: HttpServletResponse): Unit = {
@@ -95,6 +80,23 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
     } else if(path.length == 3) {
       runQuery(appName, path(1), path(2), input, resp)
     }
+  }
+}
+
+object AppstaxServlet {
+  val executor: ExecutionContext = ExecutionContext.global
+
+  def truncateAsyncLists(results: Object, pageSize: Int): Object = {
+    results match {
+      case x: AsyncList[Object] => Await.result(x.take(pageSize, executor), Duration.Inf).map(truncateAsyncLists(_, pageSize))
+      case x: List[Object] => x.map(truncateAsyncLists(_, pageSize))
+      case x: Map[String,Object] => x.iterator.map(kv => (kv._1, truncateAsyncLists(kv._2, pageSize))).toMap
+      case x: mutable.HashMap[String,Object] => x.iterator.map(kv => (kv._1, truncateAsyncLists(kv._2, pageSize))).toMap
+      case x => x
+    }
+  }
+  def truncateAsyncLists[T](results: AsyncList[T], pageSize: Int): Future[List[T]] = {
+    results.take(pageSize, executor).map(truncateAsyncLists(_, pageSize).asInstanceOf[List[T]])(executor)
   }
 }
 

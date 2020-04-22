@@ -1,9 +1,10 @@
 package appstax
 
+import java.net.InetSocketAddress
 import java.util.concurrent.CompletionStage
 
 import appstax.util.AsyncList
-import com.datastax.oss.driver.api.core.CqlSession
+import com.datastax.oss.driver.api.core.{CqlSession, CqlSessionBuilder}
 import com.datastax.oss.driver.api.core.`type`.DataType
 import com.datastax.oss.driver.api.core.cql.{AsyncResultSet, Row, Statement}
 import com.datastax.oss.driver.api.querybuilder.schema.CreateTable
@@ -95,4 +96,24 @@ package object cassandra {
   def createKeyspace(session: CqlSession, name: String, replication: Int): Future[AsyncResultSet] = {
     session.executeAsync(SchemaBuilder.createKeyspace(name).ifNotExists().withSimpleStrategy(replication).build).asScala
   }
+
+  def sessionBuilder(contacts: List[(String, Int)], dataCenter: String): CqlSessionBuilder = {
+    val builder = contacts.foldLeft(CqlSession.builder)((builder, contact) => builder.addContactPoint(InetSocketAddress.createUnresolved(contact._1, contact._2)))
+    builder.withLocalDatacenter(dataCenter)
+  }
+  def session(contacts: List[(String, Int)], dataCenter: String): CqlSession = sessionBuilder(contacts, dataCenter).build
+  def session(contacts: List[(String, Int)], dataCenter: String, keyspace: String): CqlSession = sessionBuilder(contacts, dataCenter).withKeyspace(keyspace).build
+
+  def wipeKeyspaceSession(contacts: List[(String, Int)], dataCenter: String, keyspace: String): CqlSession = {
+    val sessionWithoutKeyspace = session(contacts, dataCenter)
+    sessionWithoutKeyspace.execute(SchemaBuilder.dropKeyspace(keyspace).ifExists.build)
+    sessionWithoutKeyspace
+  }
+  def sessionWithNewKeyspace(contacts: List[(String, Int)], dataCenter: String, keyspace: String, replication: Int): CqlSession = {
+    val recreateSession = wipeKeyspaceSession(contacts, dataCenter, keyspace)
+    recreateSession.execute(SchemaBuilder.createKeyspace(keyspace).withSimpleStrategy(replication).build)
+    recreateSession.close
+    session(contacts, dataCenter, keyspace)
+  }
+
 }
