@@ -32,9 +32,9 @@ def create():
             {
                 "time": 12345,
                 "products": {
-                    "link": {
-                        "update": {
-                            "match": ["name", "=", "widget"]
+                    "-link": {
+                        "-update": {
+                            "-match": ["name", "=", "widget"]
                         }
                     }
                 }
@@ -44,8 +44,8 @@ def create():
             {
                 "total": 0,
                 "products": {
-                    "replace": {
-                        "create": []
+                    "-replace": {
+                        "-create": []
                     }
                 }
             }
@@ -56,18 +56,18 @@ def create():
 def get():
     # get all Customers with firstName=Daniel, include any related addresses and orders in results
     result = requests.post(url + "/test/Customer/get", json={
-        "match":["firstName","=", "Steve"],
+        "-match":["firstName","=", "Steve"],
         "addresses":{},
         "orders":{}})
     printResult(result)
 
 def update():
     result = requests.post(url + "/test/Customer/update", json={
-        "match":["firstName","=","Steve"],
+        "-match":["firstName","=","Steve"],
         "lastName": "Danger",
         "addresses":{
-            "update":{
-                "match":["customers.firstName","=","Steve"],
+            "-update":{
+                "-match":["customers.firstName","=","Steve"],
                 "street":"other st"}}})
     printResult(result)
 
