@@ -1,6 +1,6 @@
 package appstax.model
 
-import appstax.queries.keywords
+import appstax.keywords
 
 package object queries {
 
@@ -24,7 +24,7 @@ package object queries {
 
 
   def transform(query: GetQuery, payload: Map[String,Object]): Map[String,Object] = {
-    val matchArguments = payload(appstax.model.parser.QUERY_MATCH_CONFIG).asInstanceOf[Map[String,Object]]
+    val matchArguments = payload(keywords.mutation.MATCH).asInstanceOf[Map[String,Object]]
     val substitutions = query.`match`.map(cond => cond.replaceArgument(matchArguments(cond.argument)))
     val matchPayload = Map((keywords.mutation.MATCH, substitutions.flatMap(cond => List(cond.field, cond.comparison, cond.argument))))
     val selectionPayload = transform(query.selection)
