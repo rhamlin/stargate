@@ -12,5 +12,11 @@ buildNumber.properties
 
 #intellij
 .idea
+*.iml
 
+#metal lsp server
+.bloop
+.metals
 
+#virtualenv for demo script
+venv
