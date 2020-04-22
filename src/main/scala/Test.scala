@@ -56,7 +56,7 @@ object Test extends App {
     val id:UUID = result.value.get.get.asInstanceOf[List[Object]].head.asInstanceOf[Map[String,UUID]]("entityId")
 
     def getCustomer: Map[String,Object] = Map(
-      ("match", List("entityId", ScalarComparison.EQ, id)),
+      ("-match", List("entityId", ScalarComparison.EQ, id)),
       ("addresses", Map()),
       ("orders", Map())
     )
@@ -66,7 +66,7 @@ object Test extends App {
 
 
     def updateCustomer: Map[String,Object] = Map(
-      ("match", List("addresses.street", ScalarComparison.GTE, "X", "addresses.street", ScalarComparison.LT, "Z")),
+      ("-match", List("addresses.street", ScalarComparison.GTE, "X", "addresses.street", ScalarComparison.LT, "Z")),
       ("firstName", "WOMBO")
     )
     def updateCustomerQ: Map[String,Object] => Future[List[Map[String, Object]]] = appstax.queries.update(model, "Customer", _, sesh, ec)
@@ -75,12 +75,12 @@ object Test extends App {
     println("updated", updateResult.mkString("\n"))
     updateResult.foreach(entity => {
       val id = entity(schema.ENTITY_ID_COLUMN_NAME)
-      val getent = appstax.queries.get(model, "Customer", Map(("match", List("entityId", ScalarComparison.EQ, id)), ("addresses",Map())), sesh, ec)
+      val getent = appstax.queries.get(model, "Customer", Map(("-match", List("entityId", ScalarComparison.EQ, id)), ("addresses",Map())), sesh, ec)
       println(getent)
     })
 
     println("\n\ndeleted")
-    val delRes = appstax.queries.delete(model, "Customer", Map(("match", List("firstName", ScalarComparison.EQ, "WOMBO"))), sesh, ec)
+    val delRes = appstax.queries.delete(model, "Customer", Map(("-match", List("firstName", ScalarComparison.EQ, "WOMBO"))), sesh, ec)
     println(Await.result(delRes, Duration.Inf).mkString("\n"))
 
 
