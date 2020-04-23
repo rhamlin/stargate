@@ -31,11 +31,12 @@ trait CassandraTest {
       contacts = List(("localhost", localDocker.get))
       alreadyRunning = true
     } else {
-      val start = util.process.exec(List("docker", "run", "--name", dockerId, "-d", "-P", "-e", "DS_LICENSE=accept", "datastax/dse-server")).get
+      val image = "datastax/dse-server:6.8.0"
+      val start = util.process.exec(List("docker", "run", "--name", dockerId, "-d", "-P", "-e", "DS_LICENSE=accept", image)).get
       logger.warn(s"""starting cassandra docker container for test: ${dockerId})
         |    this can take nearly a minute to start, so it's generally faster to: 1) run cassandra in the background on port 9042, or
         |    2) run docker with name ${persistentDseContainer} with the following command:
-        |    docker run -d -P --name ${persistentDseContainer} -e "DS_LICENSE=accept" datastax/dse-server""".stripMargin)
+        |    docker run -d -P --name ${persistentDseContainer} -e "DS_LICENSE=accept" ${image}""".stripMargin)
       val port =  Integer.parseInt(util.process.exec(List("docker", "port", dockerId, "9042")).get.split(":")(1).trim)
       contacts = List(("localhost", port))
       util.retry(cassandra.session(contacts, dataCenter), Duration.apply(60, TimeUnit.SECONDS), Duration.apply(5, TimeUnit.SECONDS)).get
