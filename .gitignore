@@ -20,3 +20,8 @@ buildNumber.properties
 
 #virtualenv for demo script
 venv
+
+.classpath
+.project
+.settings
+stargate-clone*
