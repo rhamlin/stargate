@@ -35,7 +35,7 @@ func Apply(name string, path string, url string, showDate bool) bool {
 		url = upload.Host
 	}
 
-	_, err := upload.Upload(path, url+"/"+name)
+	err := upload.Upload(path, url+"/"+name)
 
 	errored := err != nil
 

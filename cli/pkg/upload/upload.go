@@ -1,9 +1,7 @@
 package upload
 
 import (
-	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"net/http"
 	"os"
 
@@ -27,10 +25,10 @@ type response struct {
 }
 
 // Upload posts the contents of a file to an url
-func Upload(path string, url string) (string, error) {
+func Upload(path string, url string) error {
 	url, err := purell.NormalizeURLString(url, purell.FlagsUnsafeGreedy)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	file, err := os.Open(path)
@@ -38,18 +36,13 @@ func Upload(path string, url string) (string, error) {
 
 	resp, err := http.Post(url, "text/plain", file)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
-
-	var responseBody response
-	json.Unmarshal(body, &responseBody)
-
-	if len(responseBody.Message) > 0 {
-		return "", errors.New(responseBody.Message)
+	if resp.StatusCode != 200 {
+		return errors.New("Server error")
 	}
 
-	return responseBody.Path, err
+	return nil
 }
