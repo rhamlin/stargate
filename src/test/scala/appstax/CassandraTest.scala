@@ -20,7 +20,8 @@ trait CassandraTest {
 
   def ensureCassandraRunning(): Unit = {
     val local = Try(cassandra.session(contacts, dataCenter))
-    lazy val localDocker = Try(Integer.parseInt(util.process.exec(List("docker", "port", "test-dse", "9042")).get.split(":")(1).trim))
+    val persistentDseContainer = "test-dse"
+    lazy val localDocker = Try(Integer.parseInt(util.process.exec(List("docker", "port", persistentDseContainer, "9042")).get.split(":")(1).trim))
     if(local.isSuccess) {
       local.get.close
       logger.info("using already running cassandra instance for test")
@@ -31,8 +32,10 @@ trait CassandraTest {
       alreadyRunning = true
     } else {
       val start = util.process.exec(List("docker", "run", "--name", dockerId, "-d", "-P", "-e", "DS_LICENSE=accept", "datastax/dse-server")).get
-      logger.warn("starting cassandra docker container for test: {}", dockerId)
-      logger.warn("this can take nearly a minute to start, so it's generally faster to run cassandra in the background on port 9042, or with docker name 'test-dse'")
+      logger.warn(s"""starting cassandra docker container for test: ${dockerId})
+        |    this can take nearly a minute to start, so it's generally faster to: 1) run cassandra in the background on port 9042, or
+        |    2) run docker with name ${persistentDseContainer} with the following command:
+        |    docker run -d -P --name ${persistentDseContainer} -e "DS_LICENSE=accept" datastax/dse-server""".stripMargin)
       val port =  Integer.parseInt(util.process.exec(List("docker", "port", dockerId, "9042")).get.split(":")(1).trim)
       contacts = List(("localhost", port))
       util.retry(cassandra.session(contacts, dataCenter), Duration.apply(60, TimeUnit.SECONDS), Duration.apply(5, TimeUnit.SECONDS)).get
