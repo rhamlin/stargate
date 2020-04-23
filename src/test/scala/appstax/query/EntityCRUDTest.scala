@@ -61,10 +61,13 @@ class EntityCRUDTest {
     val conditions = Map((appstax.keywords.mutation.MATCH, List(ENTITY_ID_COLUMN_NAME, "=", entityId)))
     conditions ++ getRequestRelations(model, entityName, Set(entityName))
   }
-  def getEntity(model: OutputModel, entityName: String, entityId: UUID, session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
+  def getEntities(model: OutputModel, entityName: String, entityId: UUID, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
     val request = getRequestByEntityId(model.input, entityName, entityId)
     val result = model.getWrapper(entityName)(session, request, executor)
-    appstax.AppstaxServlet.truncateAsyncLists(result, 1000).map(list => {assert(list.length == 1); list(0)})
+    appstax.AppstaxServlet.truncateAsyncLists(result, 1000)
+  }
+  def getEntity(model: OutputModel, entityName: String, entityId: UUID, session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
+    getEntities(model, entityName, entityId, session, executor).map(list => {assert(list.length == 1); list(0)})
   }
   def getAllEntities(model: OutputModel, entityName: String, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
     val request = getRequestRelations(model.input, entityName, Set(entityName)).updated(appstax.keywords.mutation.MATCH, List.empty)
@@ -160,6 +163,23 @@ class EntityCRUDTest {
     })
   }
 
+  def deleteNestedEntity(model: OutputModel, entityName: String, entity: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
+    val randomRelation = chooseRandomRelation(model, entityName, entity)
+    val children = entity(randomRelation.name).asInstanceOf[List[Map[String,Object]]]
+    if(children.isEmpty) {
+      return Future.successful(entity)
+    }
+    val randomChild = children(Random.nextInt(children.length))(ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID]
+    val requestMatch = Map((appstax.keywords.mutation.MATCH, List(ENTITY_ID_COLUMN_NAME, "=", randomChild)))
+    val deleteRes = model.deleteWrapper(randomRelation.targetEntityName)(session, requestMatch, executor)
+    deleteRes.flatMap(response => {
+      val deleted = getEntities(model, randomRelation.targetEntityName, randomChild, session, executor)
+      deleted.map(deleted => { assert(deleted.isEmpty); response})
+    }).map(_ => {
+      entity.updatedWith(randomRelation.name)(_.map(_.asInstanceOf[List[Map[String,Object]]].filter(_(ENTITY_ID_COLUMN_NAME) != randomChild)))
+    })
+  }
+
   @Test
   def crudTest: Unit = {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
@@ -187,6 +207,10 @@ class EntityCRUDTest {
         val replaced = Await.result(unlinkNestedRelation(model, entityName, unlinked, session, global), Duration.Inf)
         val get5 = Await.result(getEntity(model, entityName, created(ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID], session, global), Duration.Inf)
         diff(replaced, get5)
+
+        val deleted = Await.result(deleteNestedEntity(model, entityName, replaced, session, global), Duration.Inf)
+        val get6 = Await.result(getEntity(model, entityName, created(ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID], session, global), Duration.Inf)
+        diff(deleted, get6)
       })
     })
     EntityCRUDTest.cleanupSession(session)
