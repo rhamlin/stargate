@@ -12,6 +12,7 @@ import org.junit.{AfterClass, BeforeClass, Test}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.Random
 
 
 class EntityCRUDTest {
@@ -60,6 +61,11 @@ class EntityCRUDTest {
     val conditions = Map((appstax.keywords.mutation.MATCH, List(ENTITY_ID_COLUMN_NAME, "=", entityId)))
     conditions ++ getRequestRelations(model, entityName, Set(entityName))
   }
+  def getEntity(model: OutputModel, entityName: String, entityId: UUID, session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
+    val request = getRequestByEntityId(model.input, entityName, entityId)
+    val result = model.getWrapper(entityName)(session, request, executor)
+    appstax.AppstaxServlet.truncateAsyncLists(result, 1000).map(list => {assert(list.length == 1); list(0)})
+  }
 
   // checks that two entity trees are the same, ignoring missing or empty-list relations
   def diff(expected: Map[String,Object], queried: Map[String,Object]): Unit = {
@@ -76,8 +82,17 @@ class EntityCRUDTest {
     })
   }
 
-  def testUpdate(): Unit = {
-
+  def testUpdateScalars(model: OutputModel, entityName: String, entity: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
+    val relations = model.input.entities(entityName).relations.values.filter(r => entity.contains(r.name)).toList
+    val randomRelation = relations(Random.nextInt(relations.length))
+    val newValues = appstax.model.generator.entityFields(model.input.entities(randomRelation.targetEntityName).fields.values.toList)
+    val updaateReq = newValues ++ Map((appstax.keywords.mutation.MATCH, List(randomRelation.inverseName + "." + ENTITY_ID_COLUMN_NAME, "=", entity(ENTITY_ID_COLUMN_NAME))))
+    val updateRes = model.updateWrapper(randomRelation.targetEntityName)(session, updaateReq, executor)
+    updateRes.map(_ => {
+      val children = entity(randomRelation.name).asInstanceOf[List[Map[String,Object]]]
+      val updatedChildren = children.map(_ ++ newValues)
+      entity.updated(randomRelation.name, updatedChildren)
+    })
   }
 
 
@@ -91,11 +106,10 @@ class EntityCRUDTest {
       List.range(0, 20).foreach(_ => {
         val created = Await.result(createEntityWithIds(model, entityName, session, global), Duration.Inf)
         println(om.writeValueAsString(appstax.util.scalaToJava(created)))
-        val getReq = getRequestByEntityId(model.input, entityName, created(ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID])
-        val getResultAsync = model.getWrapper(entityName)(session, getReq, global)
-        val getResult = Await.result(appstax.AppstaxServlet.truncateAsyncLists(getResultAsync, 1000), Duration.Inf)
-        assert(getResult.length == 1)
-        diff(created, getResult(0))
+        val get = Await.result(getEntity(model, entityName, created(ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID], session, global), Duration.Inf)
+        diff(created, get)
+
+
       })
     })
     EntityCRUDTest.cleanupSession(session)
