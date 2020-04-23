@@ -14,7 +14,7 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
 
-class CreateEntityTest {
+class EntityCRUDTest {
 
   val om = new ObjectMapper
   om.configure(SerializationFeature.INDENT_OUTPUT, true)
@@ -46,62 +46,63 @@ class CreateEntityTest {
     withRelations
   }
 
-  def getRequestRelations(model: InputModel, entityName: String, entityPayload: Map[String,Object]): Map[String, Object] = {
-    val entity = model.entities(entityName)
-    entity.relations.filter(rel => entityPayload.contains(rel._1)).foldLeft(Map.empty[String,Object])((merge, relation) => {
-      val relatedList = entityPayload(relation._1).asInstanceOf[List[Map[String,ObjectMapper]]]
-      if(relatedList.nonEmpty) {
-        val recurse = getRequestRelations(model, relation._2.targetEntityName, relatedList(0))
-        merge.updated(relation._1, recurse)
-      } else {
-        merge
-      }
-    })
-  }
-  def getRequestByEntityId(model: InputModel, entityName: String, entityPayload: Map[String,Object]): Map[String, Object] = {
-    val conditions = Map((appstax.keywords.mutation.MATCH, List(ENTITY_ID_COLUMN_NAME, "=", entityPayload(ENTITY_ID_COLUMN_NAME))))
-    conditions ++ getRequestRelations(model, entityName, entityPayload)
+  def createEntityWithIds(model: OutputModel, entityName: String, session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
+    val (request, response) = create(model, entityName, session, executor)
+    response.map(zipEntityIds(model.input, entityName, request, _))
   }
 
-  def diffCreateAndGet(create: Map[String,Object], get: Map[String,Object]): Unit = {
-    get.keys.foreach(field => {
-      val getVal = get(field)
+  // get whole entity tree without looping back to parent entities
+  def getRequestRelations(model: InputModel, entityName: String, visited: Set[String]): Map[String, Object] = {
+    val relations = model.entities(entityName).relations.filter(r => !visited.contains(r._2.targetEntityName))
+    relations.map(r => (r._1, getRequestRelations(model, r._2.targetEntityName, visited ++ Set(r._2.targetEntityName))))
+  }
+  def getRequestByEntityId(model: InputModel, entityName: String, entityId: UUID): Map[String, Object] = {
+    val conditions = Map((appstax.keywords.mutation.MATCH, List(ENTITY_ID_COLUMN_NAME, "=", entityId)))
+    conditions ++ getRequestRelations(model, entityName, Set(entityName))
+  }
+
+  // checks that two entity trees are the same, ignoring missing or empty-list relations
+  def diff(expected: Map[String,Object], queried: Map[String,Object]): Unit = {
+    queried.keys.foreach(field => {
+      val getVal = queried(field)
       if(getVal.isInstanceOf[List[Object]]) {
-        val createVal = create.get(field).map(_.asInstanceOf[List[Map[String,Object]]]).getOrElse(List.empty).sortBy(_(ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID])
+        val createVal = expected.get(field).map(_.asInstanceOf[List[Map[String,Object]]]).getOrElse(List.empty).sortBy(_(ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID])
         val getValList = getVal.asInstanceOf[List[Map[String,Object]]].sortBy(_(ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID])
         assert(createVal.length == getValList.length)
-        createVal.zip(getValList).map(cg => diffCreateAndGet(cg._1, cg._2))
+        createVal.zip(getValList).map(cg => diff(cg._1, cg._2))
       } else {
-        assert(getVal == create(field), List(getVal, "=", create(field)).toString)
+        assert(getVal == expected(field), List(getVal, "=", expected(field)).toString)
       }
     })
+  }
+
+  def testUpdate(): Unit = {
+
   }
 
 
   @Test
-  def createAndGetTest: Unit = {
+  def crudTest: Unit = {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
     val model = appstax.schema.outputModel(inputModel)
-    val session = CreateEntityTest.newSession
+    val session = EntityCRUDTest.newSession
     Await.result(Future.sequence(model.tables.map(t => appstax.cassandra.create(session, t))), Duration.Inf)
     model.input.entities.keys.foreach(entityName => {
       List.range(0, 20).foreach(_ => {
-        val (req, respF) = create(model, entityName, session, global)
-        val resp = Await.result(respF, Duration.Inf)
-        val zipped = zipEntityIds(model.input, entityName, req, resp)
-        println(om.writeValueAsString(appstax.util.scalaToJava(zipped)))
-        val getReq = getRequestByEntityId(model.input, entityName, zipped)
+        val created = Await.result(createEntityWithIds(model, entityName, session, global), Duration.Inf)
+        println(om.writeValueAsString(appstax.util.scalaToJava(created)))
+        val getReq = getRequestByEntityId(model.input, entityName, created(ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID])
         val getResultAsync = model.getWrapper(entityName)(session, getReq, global)
         val getResult = Await.result(appstax.AppstaxServlet.truncateAsyncLists(getResultAsync, 1000), Duration.Inf)
         assert(getResult.length == 1)
-        diffCreateAndGet(zipped, getResult(0))
+        diff(created, getResult(0))
       })
     })
-    CreateEntityTest.cleanupSession(session)
+    EntityCRUDTest.cleanupSession(session)
   }
 }
 
-object CreateEntityTest extends CassandraTest {
+object EntityCRUDTest extends CassandraTest {
   @BeforeClass def before = this.ensureCassandraRunning
   @AfterClass def after = this.cleanup
 }
