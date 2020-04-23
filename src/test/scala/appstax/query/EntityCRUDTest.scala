@@ -12,7 +12,7 @@ import org.junit.{AfterClass, BeforeClass, Test}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.Random
+import scala.util.{Random, Try}
 
 
 class EntityCRUDTest {
@@ -82,7 +82,7 @@ class EntityCRUDTest {
     })
   }
 
-  def testUpdateScalars(model: OutputModel, entityName: String, entity: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
+  def updateNestedScalars(model: OutputModel, entityName: String, entity: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
     val relations = model.input.entities(entityName).relations.values.filter(r => entity.contains(r.name)).toList
     val randomRelation = relations(Random.nextInt(relations.length))
     val newValues = appstax.model.generator.entityFields(model.input.entities(randomRelation.targetEntityName).fields.values.toList)
@@ -108,7 +108,7 @@ class EntityCRUDTest {
         val get = Await.result(getEntity(model, entityName, created(ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID], session, global), Duration.Inf)
         diff(created, get)
 
-        val updated = Await.result(testUpdateScalars(model, entityName, created, session, global), Duration.Inf)
+        val updated = Await.result(updateNestedScalars(model, entityName, created, session, global), Duration.Inf)
         val get2 = Await.result(getEntity(model, entityName, created(ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID], session, global), Duration.Inf)
         diff(updated, get2)
       })
