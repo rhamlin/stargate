@@ -105,11 +105,12 @@ class EntityCRUDTest {
     model.input.entities.keys.foreach(entityName => {
       List.range(0, 20).foreach(_ => {
         val created = Await.result(createEntityWithIds(model, entityName, session, global), Duration.Inf)
-        println(om.writeValueAsString(appstax.util.scalaToJava(created)))
         val get = Await.result(getEntity(model, entityName, created(ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID], session, global), Duration.Inf)
         diff(created, get)
 
-
+        val updated = Await.result(testUpdateScalars(model, entityName, created, session, global), Duration.Inf)
+        val get2 = Await.result(getEntity(model, entityName, created(ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID], session, global), Duration.Inf)
+        diff(updated, get2)
       })
     })
     EntityCRUDTest.cleanupSession(session)
