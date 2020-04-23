@@ -86,7 +86,6 @@ package object write {
     implicit val ec: ExecutionContext = executor
     val updateResults = tables.map(table => {
       val keyChanged = table.columns.key.combined.exists(col => changes.get(col.name).orNull != null)
-      println(table, keyChanged)
       if(keyChanged) {
         val deleteResult = deleteEntity(table, currentEntity, session, executor)
         val insertPayload = (currentEntity++changes)
