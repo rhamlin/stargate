@@ -118,6 +118,10 @@ class AsyncList[T] private (private val value: Future[Option[(T, () => AsyncList
     })(executor)
   }
 
+  def length(executor: ExecutionContext): Future[Int] = {
+    this.foldLeft(0)((sum, _) => sum + 1, executor)
+  }
+
   override def toString: String = {
     val threadPool = Executors.newFixedThreadPool(1)
     implicit val ec = ExecutionContext.fromExecutor(threadPool)
