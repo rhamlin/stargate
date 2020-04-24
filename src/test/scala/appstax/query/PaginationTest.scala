@@ -59,6 +59,7 @@ class PaginationTest {
 }
 
 object PaginationTest extends CassandraTest {
+
   @BeforeClass def before = this.ensureCassandraRunning
   @AfterClass def after = this.cleanup
 }

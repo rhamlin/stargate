@@ -3,12 +3,21 @@ package appstax
 import java.util
 import java.util.concurrent.TimeUnit
 
+import com.fasterxml.jackson.databind.{ObjectMapper, SerializationFeature}
+
 import scala.collection.JavaConverters.mapAsJavaMap
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 package object util {
+
+  val indentedObjectMapper = {
+    val om = new ObjectMapper
+    om.configure(SerializationFeature.INDENT_OUTPUT, true)
+    om
+  }
+  def prettyJson(o: Object): String = indentedObjectMapper.writeValueAsString(scalaToJava(o))
 
   def enumerationNames(enum: Enumeration): Map[String, enum.Value] = enum.values.iterator.map(v => (v.toString,v)).toMap
 
