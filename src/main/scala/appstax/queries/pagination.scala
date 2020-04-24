@@ -9,8 +9,8 @@ import scala.concurrent.{ExecutionContext, Future}
 
 object pagination {
 
-  // maps uuid to stream of entities, as well as the TTL on that stream
-  type Streams = Map[UUID, (Int, AsyncList[Map[String,Object]])]
+  // maps uuid to stream of entities, as well as the TTL and get request on that stream
+  type Streams = Map[UUID, (Int, Map[String,Object], AsyncList[Map[String,Object]])]
 
   // given a tree of entities in (lazy) AsyncLists, chop off the first N entities, and return a uuid pointing to the rest of the list
   def truncate(model: InputModel, entityName: String, getRequest: Map[String,Object],
@@ -22,7 +22,7 @@ object pagination {
 
     val (head, tail) = entities.splitAt(limit, executor)
     val uuid = UUID.randomUUID()
-    val resultStream: Streams = if(continue) Map((uuid, (ttl, tail))) else Map.empty
+    val resultStream: Streams = if(continue) Map((uuid, (ttl, getRequest, tail))) else Map.empty
 
     val entity = model.entities(entityName)
     val includedRelations: Map[String, (RelationField, Object)] = entity.relations.filter(r => getRequest.contains(r._1)).map(nr => (nr._1, (nr._2, getRequest(nr._1))))
