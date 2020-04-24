@@ -104,7 +104,7 @@ object AppstaxServlet {
 object Main {
 
   def main(args: Array[String]) = {
-    val config = if (args.length > 0) ConfigFactory.parseFile(new File(args(0))) else ConfigFactory.defaultApplication()
+    val config = (if (args.length > 0) ConfigFactory.parseFile(new File(args(0))) else ConfigFactory.defaultApplication()).resolve()
 
     val server = new org.eclipse.jetty.server.Server(config.getInt("http.port"))
     val handler = new ServletHandler()
