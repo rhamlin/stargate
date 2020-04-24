@@ -2,11 +2,10 @@ package appstax.query
 
 import java.util.UUID
 
-import appstax.CassandraTest
+import appstax.{CassandraTest, queries}
 import appstax.model.{InputModel, OutputModel, RelationField, parser}
 import appstax.schema.ENTITY_ID_COLUMN_NAME
 import com.datastax.oss.driver.api.core.CqlSession
-import com.fasterxml.jackson.databind.{ObjectMapper, SerializationFeature}
 import com.typesafe.config.ConfigFactory
 import org.junit.{AfterClass, BeforeClass, Test}
 
@@ -17,8 +16,6 @@ import scala.util.{Random, Try}
 
 class EntityCRUDTest {
 
-  val om = new ObjectMapper
-  om.configure(SerializationFeature.INDENT_OUTPUT, true)
   import ExecutionContext.Implicits.global
 
   def create(model: OutputModel, entityName: String, session: CqlSession, executor: ExecutionContext): (Map[String,Object], Future[Map[String,Object]]) = {
@@ -63,16 +60,14 @@ class EntityCRUDTest {
   }
   def getEntities(model: OutputModel, entityName: String, entityId: UUID, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
     val request = getRequestByEntityId(model.input, entityName, entityId)
-    val result = model.getWrapper(entityName)(session, request, executor)
-    appstax.AppstaxServlet.truncateAsyncLists(result, 1000)
+    queries.getAndTruncate(model, entityName, request, 1000, session, executor)
   }
   def getEntity(model: OutputModel, entityName: String, entityId: UUID, session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
     getEntities(model, entityName, entityId, session, executor).map(list => {assert(list.length == 1); list(0)})
   }
   def getAllEntities(model: OutputModel, entityName: String, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
     val request = getRequestRelations(model.input, entityName, Set(entityName)).updated(appstax.keywords.mutation.MATCH, List.empty)
-    val result = model.getWrapper(entityName)(session, request, executor)
-    appstax.AppstaxServlet.truncateAsyncLists(result, 1000)
+    queries.getAndTruncate(model, entityName, request, 1000, session, executor)
   }
 
   // checks that two entity trees are the same, ignoring missing or empty-list relations
@@ -180,11 +175,7 @@ class EntityCRUDTest {
     })
   }
 
-  @Test
-  def crudTest: Unit = {
-    val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
-    val model = appstax.schema.outputModel(inputModel)
-    val session = EntityCRUDTest.newSession
+  def crudTest(model: OutputModel, session: CqlSession): Boolean = {
     Await.result(Future.sequence(model.tables.map(t => appstax.cassandra.create(session, t))), Duration.Inf)
     model.input.entities.keys.foreach(entityName => {
       List.range(0, 20).foreach(_ => {
@@ -213,11 +204,22 @@ class EntityCRUDTest {
         diff(deleted, get6)
       })
     })
+    true
+  }
+
+  @Test
+  def crudTest: Unit = {
+    val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
+    val model = appstax.schema.outputModel(inputModel)
+    val session = EntityCRUDTest.newSession
+    val test = Try(crudTest(model, session))
     EntityCRUDTest.cleanupSession(session)
+    assert(test.get)
   }
 }
 
 object EntityCRUDTest extends CassandraTest {
+
   @BeforeClass def before = this.ensureCassandraRunning
   @AfterClass def after = this.cleanup
 }
