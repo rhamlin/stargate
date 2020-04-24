@@ -71,6 +71,10 @@ package object model {
     relationTables: Map[(String,String), CassandraTable]) {
 
     def tables: List[CassandraTable] = (entityTables.values.flatten ++ relationTables.values).toList
+    def createTables(session: CqlSession, executor: ExecutionContext): Future[Unit] = {
+      implicit val ec: ExecutionContext = executor
+      Future.sequence(this.tables.map(cassandra.create(session, _))).map(_ => ())
+    }
 
     def getWrapper(entityName: String)(session: CqlSession, payload: Map[String,Object], executor: ExecutionContext): AsyncList[Map[String, Object]] =
       appstax.queries.get(this, entityName, payload, session, executor)

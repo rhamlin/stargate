@@ -18,6 +18,12 @@ object keywords {
     val REPLACE: String = KEYWORD_PREFIX + "replace"
   }
 
+  object pagination {
+    val LIMIT: String = KEYWORD_PREFIX + "limit"
+    val CONTINUE: String = KEYWORD_PREFIX + "continue"
+    val TTL: String = KEYWORD_PREFIX + "ttl"
+  }
+
   // should probably move keywords to top-level module or somewhere else if going to have both config/schema and runtime keywords
   object config {
     val ENTITIES: String = "entities"

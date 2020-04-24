@@ -120,13 +120,21 @@ package object queries {
     AsyncList.filterSome(AsyncList.unfuture(results, executor), executor)
   }
 
-  def get(model: OutputModel, entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): AsyncList[Map[String,Object]] = {
-    val payloadMap = payload.asInstanceOf[Map[String,Object]]
-    val conditions = payloadMap(keywords.mutation.MATCH).asInstanceOf[List[Object]]
+  // returns entities matching conditions in payload, with all lists being lazy streams (async list)
+  def get(model: OutputModel, entityName: String, payload: Map[String,Object], session: CqlSession, executor: ExecutionContext): AsyncList[Map[String,Object]] = {
+    val conditions = payload(keywords.mutation.MATCH).asInstanceOf[List[Object]]
     val ids = matchEntities(model, entityName, conditions, session, executor)
-    getEntitiesAndRelated(model, entityName, ids, payloadMap, session, executor)
+    getEntitiesAndRelated(model, entityName, ids, payload, session, executor)
   }
-
+  // gets entities matching condition, then truncates all entities lists by their "-limit" parameters in the request, and returns the remaining streams in map
+  def getAndTruncate(model: OutputModel, entityName: String, payload: Map[String,Object], defaultLimit: Int, defaultTTL: Int, session: CqlSession, executor: ExecutionContext): Future[(List[Map[String,Object]], pagination.Streams)] = {
+    val result = get(model, entityName, payload, session, executor)
+    pagination.truncate(model.input, entityName, payload, result, defaultLimit, defaultTTL, executor)
+  }
+  // same as above, but drops the remaining streams for cases where you dont care
+  def getAndTruncate(model: OutputModel, entityName: String, payload: Map[String,Object], defaultLimit: Int, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
+    getAndTruncate(model, entityName, payload, defaultLimit, 0, session, executor).map(_._1)(executor)
+  }
 
 
   def relationUpdateOne(update: (OutputModel, String, String) => CassandraFunction[(UUID,UUID), Future[Any]],
