@@ -22,33 +22,45 @@ object pagination {
 
     val (head, tail) = entities.splitAt(limit, executor)
     val uuid = UUID.randomUUID()
-    val resultStream = if(continue) Map((uuid, (ttl, tail))) else Map.empty
+    val resultStream: Streams = if(continue) Map((uuid, (ttl, tail))) else Map.empty
 
     val entity = model.entities(entityName)
     val includedRelations: Map[String, (RelationField, Object)] = entity.relations.filter(r => getRequest.contains(r._1)).map(nr => (nr._1, (nr._2, getRequest(nr._1))))
-    val updatedEntities = head.map(entities => {
+    val futureUpdatedEntities = head.map(entities => {
       entities.map(entity => {
         truncateRelations(model, entityName, includedRelations, entity, defaultLimit, defaultTTL, executor)
       })
     })(executor)
-    updatedEntities.flatMap(futureUpdatedEntities => {
+    val updatedEntities = futureUpdatedEntities.flatMap(futureUpdatedEntities => {
       implicit val ec: ExecutionContext = executor
       Future.sequence(futureUpdatedEntities).map(entities_streams => {
-        (entities_streams.map(_._1), entities_streams.map(_._2).reduce(_ ++ _))
+        (entities_streams.map(_._1), entities_streams.map(_._2).fold(Map.empty:Streams)(_ ++ _))
       })
+    })(executor)
+    updatedEntities.flatMap(entities_streams => {
+      val (entities, stream) = entities_streams
+      // if continuing is enabled, and more are left in the stream, append a { "-continue": uuid } to the end of the stream
+      val withContinueId = if(continue) {
+        tail.isEmpty(executor).map(noMore => {
+          if(noMore) { entities } else { entities ++ List(Map((appstax.keywords.pagination.CONTINUE, uuid))) }
+        })(executor)
+      } else {
+        Future.successful(entities)
+      }
+      withContinueId.map((_, stream ++ resultStream))(executor)
     })(executor)
   }
 
   // for one entity and a selection of relations (and their corresponding get requests), truncate all children and return their streams
   def truncateRelations(model: InputModel, entityName: String, relationRequests: Map[String, (RelationField, Object)],
                entity: Map[String,Object], defaultLimit: Integer, defaultTTL: Integer, executor: ExecutionContext): Future[(Map[String,Object], Streams)] = {
+    implicit val ec: ExecutionContext = executor
     val childResults = relationRequests.toList.map(name_relation_request => {
       val (relationName, (relation, request)) = name_relation_request
       val recurse = truncate(model, relation.targetEntityName, request.asInstanceOf[Map[String,Object]],
         entity(relationName).asInstanceOf[AsyncList[Map[String,Object]]], defaultLimit, defaultTTL, executor)
       recurse.map((relationName, _))
     })
-    implicit val ec: ExecutionContext = executor
     Future.sequence(childResults).map(childResults => {
       childResults.foldLeft((entity, Map.empty : Streams))((entity_streams, childResult) => {
         val (entity, streams) = entity_streams
