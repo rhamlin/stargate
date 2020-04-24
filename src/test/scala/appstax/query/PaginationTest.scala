@@ -36,7 +36,7 @@ class PaginationTest {
     )
     val (entities, streams) = Await.result(appstax.queries.getAndTruncate(model, "A", req, limit, 0, session, executor), Duration.Inf)
     assert(entities.length <= limit || (entities.length == limit + 1 && entities.last.contains(appstax.keywords.pagination.CONTINUE)))
-    streams.values.foreach((ttl_stream) => Await.result(ttl_stream._2.length(executor), Duration.Inf) == branching - limit)
+    streams.values.foreach((ttl_stream) => Await.result(ttl_stream.entities.length(executor), Duration.Inf) == branching - limit)
   }
 
   def paginationTest(model: OutputModel, branching: Int, limit: Int, session: CqlSession, executor: ExecutionContext): Boolean = {
