@@ -16,9 +16,6 @@ limitations under the License.
 package cmd
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/datastax/stargate/cli/pkg/docker"
 
 	"github.com/spf13/cobra"
@@ -26,30 +23,81 @@ import (
 
 // serviceCmd represents the apply command
 var serviceCmd = &cobra.Command{
-	Short:   "Start a local, dockerized service server",
-	Long:    `Start a local, dockerized service server`,
+	Short:   "Start a local, dockerized service",
+	Long:    `Start a local, dockerized service`,
 	Use:     "service (start|stop|remove)",
 	Example: "stargate service start",
-	Args:    cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		command := strings.ToLower(args[0])
-		var err error
-		switch command {
-		case "start":
-			err = docker.Start("docker.io/", "service", "8080")
-		case "stop":
-			err = docker.Stop("service")
-		case "remove":
-			err = docker.Remove("service")
-		}
-		if err == nil {
-			fmt.Println("Success!")
-		} else {
-			fmt.Println(err)
-		}
-	},
 }
 
 func init() {
 	rootCmd.AddCommand(serviceCmd)
+
+	serviceCmd.AddCommand(&cobra.Command{
+		Short:   "Stop a local stargate service",
+		Long:    `Stop a local stargate service`,
+		Use:     "stop",
+		Example: "stargate service stop",
+		Args:    cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			client, err := docker.NewClient()
+			if err != nil {
+				cmd.PrintErrln(err)
+			}
+			err = client.Stop("service")
+			if err != nil {
+				cmd.PrintErrln(err)
+			} else {
+				cmd.Println("Success!")
+			}
+		},
+	})
+
+	serviceCmd.AddCommand(&cobra.Command{
+		Short:   "Force remove a local stargate service",
+		Long:    `Force remove a local stargate service`,
+		Use:     "remove",
+		Example: "stargate service remove",
+		Args:    cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			client, err := docker.NewClient()
+			if err != nil {
+				cmd.PrintErrln(err)
+			}
+			err = client.Remove("service")
+			if err != nil {
+				cmd.PrintErrln(err)
+			} else {
+				cmd.Println("Success!")
+			}
+		},
+	})
+
+	serviceCmd.AddCommand(&cobra.Command{
+		Short:   "Start a local, dockerized service server",
+		Long:    `Start a local, dockerized service server`,
+		Use:     "start [CASSANDRA_HOST]",
+		Example: "stargate service start",
+		Args:    cobra.MaximumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			client, err := docker.NewClient()
+			if err != nil {
+				cmd.PrintErrln(err)
+			}
+			cassandraURL := "stargate-cassandra"
+			if len(args) == 1 {
+				cassandraURL = args[0]
+			}
+			err = client.StartService(&docker.StartServiceOptions{
+				CassandraURL:    cassandraURL,
+				ExposedPorts:    []string{"8080"},
+				DockerImageHost: "docker.io/",
+				ImageName:       "service",
+			})
+			if err != nil {
+				cmd.PrintErrln(err)
+			} else {
+				cmd.Println("Success!")
+			}
+		},
+	})
 }
