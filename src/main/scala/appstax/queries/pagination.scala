@@ -16,14 +16,18 @@ object pagination {
   // given a tree of entities in (lazy) AsyncLists, chop off the first N entities, and return a uuid pointing to the rest of the list
   def truncate(model: InputModel, entityName: String, getRequest: Map[String,Object],
                entities: AsyncList[Map[String,Object]], defaultLimit: Integer, defaultTTL: Integer, executor: ExecutionContext): Future[(List[Map[String,Object]], Streams)] = {
+    truncate(model, entityName, getRequest, entities, UUID.randomUUID, defaultLimit, defaultTTL, executor)
+  }
+
+  def truncate(model: InputModel, entityName: String, getRequest: Map[String,Object],
+               entities: AsyncList[Map[String,Object]], streamId: UUID, defaultLimit: Integer, defaultTTL: Integer, executor: ExecutionContext): Future[(List[Map[String,Object]], Streams)] = {
 
     val limit = getRequest.get(appstax.keywords.pagination.LIMIT).map(_.asInstanceOf[Integer]).getOrElse(defaultLimit)
     val continue = getRequest.get(appstax.keywords.pagination.CONTINUE).map(_.asInstanceOf[java.lang.Boolean]).getOrElse(java.lang.Boolean.FALSE)
     val ttl = getRequest.get(appstax.keywords.pagination.TTL).map(_.asInstanceOf[Integer]).getOrElse(defaultTTL)
 
     val (head, tail) = entities.splitAt(limit, executor)
-    val uuid = UUID.randomUUID()
-    val resultStream: Streams = if(continue) Map((uuid, StreamEntry(entityName, getRequest, ttl, tail))) else Map.empty
+    val resultStream: Streams = if(continue) Map((streamId, StreamEntry(entityName, getRequest, ttl, tail))) else Map.empty
 
     val entity = model.entities(entityName)
     val includedRelations: Map[String, (RelationField, Object)] = entity.relations.filter(r => getRequest.contains(r._1)).map(nr => (nr._1, (nr._2, getRequest(nr._1))))
@@ -43,7 +47,7 @@ object pagination {
       // if continuing is enabled, and more are left in the stream, append a { "-continue": uuid } to the end of the stream
       val withContinueId = if(continue) {
         tail.isEmpty(executor).map(noMore => {
-          if(noMore) { entities } else { entities ++ List(Map((appstax.keywords.pagination.CONTINUE, uuid))) }
+          if(noMore) { entities } else { entities ++ List(Map((appstax.keywords.pagination.CONTINUE, streamId))) }
         })(executor)
       } else {
         Future.successful(entities)
