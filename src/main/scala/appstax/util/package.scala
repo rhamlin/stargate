@@ -12,12 +12,15 @@ import scala.util.Try
 
 package object util {
 
+  val objectMapper = new ObjectMapper
   val indentedObjectMapper = {
     val om = new ObjectMapper
     om.configure(SerializationFeature.INDENT_OUTPUT, true)
     om
   }
-  def prettyJson(o: Object): String = indentedObjectMapper.writeValueAsString(scalaToJava(o))
+  def fromJson(s: String): Object = javaToScala(objectMapper.readValue(s, classOf[Object]))
+  def toJson(o: Object): String = objectMapper.writeValueAsString(scalaToJava(o))
+  def toPrettyJson(o: Object): String = indentedObjectMapper.writeValueAsString(scalaToJava(o))
 
   def enumerationNames(enum: Enumeration): Map[String, enum.Value] = enum.values.iterator.map(v => (v.toString,v)).toMap
 
