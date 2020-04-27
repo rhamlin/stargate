@@ -39,10 +39,9 @@ class PaginationTest {
     streams.values.foreach((ttl_stream) => Await.result(ttl_stream.entities.length(executor), Duration.Inf) == branching - limit)
   }
 
-  def paginationTest(model: OutputModel, branching: Int, limit: Int, session: CqlSession, executor: ExecutionContext): Boolean = {
+  def paginationTest(model: OutputModel, branching: Int, limit: Int, session: CqlSession, executor: ExecutionContext): Unit = {
     Await.result(generate(model, branching, session, executor), Duration.Inf)
     query(model, limit, branching, session, executor)
-    true
   }
 
   @Test
@@ -52,9 +51,7 @@ class PaginationTest {
     val executor = ExecutionContext.global
     val session = PaginationTest.newSession
     Await.ready(model.createTables(session, executor), Duration.Inf)
-    val test = Try(paginationTest(model, 5, 3, session, executor))
-    PaginationTest.cleanupSession(session)
-    assert(test.get)
+    paginationTest(model, 5, 3, session, executor)
   }
 }
 
