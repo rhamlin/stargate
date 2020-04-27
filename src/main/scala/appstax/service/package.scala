@@ -134,7 +134,7 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
         continueQuery(appName, UUID.fromString(id), resp)
       case s"/${appName}/q/${query}" =>
         runPredefinedQuery(appName, query, input, resp)
-      case s"/$appName/${entity}" =>
+      case s"/${appName}/${entity}" =>
         val payload = util.fromJson(input)
         runQuery(appName, entity, op, payload, resp)
       case s"/${appName}" =>
