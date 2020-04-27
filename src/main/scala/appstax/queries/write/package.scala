@@ -2,19 +2,15 @@ package appstax.queries
 
 import java.util.UUID
 
-import appstax.{cassandra, schema}
-import appstax.cassandra.{CassandraFunction, CassandraTable, PagedResults}
+import appstax.cassandra.CassandraTable
 import appstax.model.{OutputModel, ScalarComparison, ScalarCondition}
-import appstax.util.AsyncList
-import com.datastax.oss.driver.api.core.CqlSession
-import com.datastax.oss.driver.api.core.cql.{Row, SimpleStatement, Statement}
+import appstax.schema
+import com.datastax.oss.driver.api.core.cql.{SimpleStatement, Statement}
 import com.datastax.oss.driver.api.querybuilder.QueryBuilder
 import com.datastax.oss.driver.api.querybuilder.delete.Delete
 import com.datastax.oss.driver.api.querybuilder.insert.{Insert, RegularInsert}
 import com.datastax.oss.driver.api.querybuilder.term.Term
 import com.datastax.oss.driver.internal.core.util.Strings
-
-import scala.concurrent.{ExecutionContext, Future}
 
 
 // functions used to implement appstax mutations
@@ -56,14 +52,12 @@ package object write {
   def entityIdPayload(entityId: UUID): Map[String,UUID] = Map((schema.ENTITY_ID_COLUMN_NAME, entityId))
   def entityIdPayload(entity: Map[String,Object]): Map[String,UUID] = entityIdPayload(entity(schema.ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID])
 
-
-  def createEntity(tables: List[CassandraTable], payload: Object, session: CqlSession, executor: ExecutionContext): (UUID, List[PagedResults[Row]]) = {
+  def createEntity(tables: List[CassandraTable], payload: Object): (UUID, List[SimpleStatement]) = {
     // TODO - could use cassandra-generated timeuuid instead of random, but then the first write would block all the secondary writes
     val uuid = UUID.randomUUID()
     val payloadMap = payload.asInstanceOf[Map[String,Object]].updated(schema.ENTITY_ID_COLUMN_NAME, uuid)
-    val inserts = tables.map(t => insertStatement(t, payloadMap))
-    val results = inserts.filter(_.isDefined).map(statement => cassandra.executeAsync(session, statement.get.build, executor))
-    (uuid, results)
+    val inserts = tables.map(t => insertStatement(t, payloadMap)).filter(_.isDefined).map(_.get.build)
+    (uuid, inserts)
   }
 
   def tableConditionsForEntity(table: CassandraTable, entity: Map[String,Object]): List[Option[ScalarCondition[Term]]] = {
@@ -72,45 +66,30 @@ package object write {
     })
   }
 
-  def deleteEntity(table: CassandraTable, entity: Map[String,Object], session: CqlSession, executor: ExecutionContext): Option[Future[Any]] = {
-    deleteStatement(table, entity).map(statement => cassandra.executeAsync(session, statement.build, executor).toList(executor))
+  def deleteEntity(tables: List[CassandraTable], entity: Map[String,Object]): (Map[String,Object], List[SimpleStatement]) = {
+    val deleteResults = tables.map(table => deleteStatement(table, entity))
+    (entityIdPayload(entity), deleteResults.filter(_.isDefined).map(_.get.build))
   }
 
-  def deleteEntity(tables: List[CassandraTable], entity: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
-    val deleteResults = tables.map(table => deleteEntity(table, entity, session, executor))
-    implicit val ec: ExecutionContext = executor
-    Future.sequence(deleteResults.filter(_.isDefined).map(_.get)).map(_ => entityIdPayload(entity))
-  }
-
-  def updateEntity(tables: List[CassandraTable], currentEntity: Map[String,Object], changes: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
-    implicit val ec: ExecutionContext = executor
-    val updateResults = tables.map(table => {
+  def updateEntity(tables: List[CassandraTable], currentEntity: Map[String,Object], changes: Map[String,Object]): (Map[String,Object], List[SimpleStatement]) = {
+    val updateStatements = tables.map(table => {
       val keyChanged = table.columns.key.combined.exists(col => changes.get(col.name).orNull != null)
       if(keyChanged) {
-        val deleteResult = deleteEntity(table, currentEntity, session, executor)
+        val maybeDelete = write.deleteStatement(table, currentEntity)
         val insertPayload = (currentEntity++changes)
         val maybeInsert = write.insertStatement(table, insertPayload)
-        val insertResult = maybeInsert.map(statement => cassandra.executeAsync(session, statement.build, executor).toList(executor))
-        implicit val ec: ExecutionContext = executor
-        Future.sequence(List(deleteResult, insertResult).filter(_.isDefined).map(_.get))
+        List(maybeDelete, maybeInsert).filter(_.isDefined).map(_.get.build)
       } else {
         val keyColumns = table.columns.key.names.combined.toSet
         val dataColumns = table.columns.data.map(_.name).toSet
         val insertPayload = currentEntity.filter(kv => keyColumns.contains(kv._1)) ++ changes.filter(kv => dataColumns.contains(kv._1))
         val maybeInsert = write.insertStatement(table, insertPayload)
-        maybeInsert.map(maybeInsert => cassandra.executeAsync(session, maybeInsert.build, executor).toList(executor)).getOrElse(Future.successful(None))
+        maybeInsert.toList.map(_.build)
       }
     })
-    Future.sequence(updateResults).map(_ => entityIdPayload(currentEntity))
+    (entityIdPayload(currentEntity), updateStatements.flatten)
   }
 
-  def updateDirectedRelation(statement: (String,UUID,UUID) => Statement[_], model: OutputModel, fromEntity: String, relationName: String): CassandraFunction[(UUID,UUID), Future[Any]] = {
-    val relationTableName = model.relationTables((fromEntity, relationName)).name
-    (session: CqlSession, from_to: (UUID, UUID), executor: ExecutionContext) => {
-      val (from, to) = from_to
-      cassandra.executeAsync(session, statement(relationTableName, from, to), executor).toList(executor)
-    }
-  }
   def createDirectedRelationStatement(tableName: String, from: UUID, to: UUID): SimpleStatement = {
     QueryBuilder.insertInto(Strings.doubleQuote(tableName)).value(Strings.doubleQuote(schema.RELATION_FROM_COLUMN_NAME), QueryBuilder.literal(from)).value(Strings.doubleQuote(schema.RELATION_TO_COLUMN_NAME), QueryBuilder.literal(to)).build
   }
@@ -120,28 +99,19 @@ package object write {
       .whereColumn(Strings.doubleQuote(schema.RELATION_TO_COLUMN_NAME)).isEqualTo(QueryBuilder.literal(to)).build
   }
 
-  def updateBidirectionalRelation(statement: (String,UUID,UUID) => Statement[_], model: OutputModel, fromEntity: String, fromRelationName: String): CassandraFunction[(UUID,UUID), Future[Any]] = {
+  def updateBidirectionalRelation(statement: (String,UUID,UUID) => Statement[_], model: OutputModel, fromEntity: String, fromRelationName: String): (UUID,UUID)=>List[Statement[_]] = {
     val fromRelation =  model.input.entities(fromEntity).relations(fromRelationName)
     val toEntity = fromRelation.targetEntityName
     val toRelationName = fromRelation.inverseName
-    val updateFrom = updateDirectedRelation(statement, model, fromEntity, fromRelationName)
-    val updateTo = updateDirectedRelation(statement, model, toEntity, toRelationName)
-
-    (session: CqlSession, from_to: (UUID, UUID), executor: ExecutionContext) => {
-      val (from, to) = from_to
-      implicit val ec: ExecutionContext = executor
-      Future.sequence(List(
-        updateFrom(session, (from, to), executor),
-        updateTo(session, (to, from), executor)
-      ))
-    }
+    val fromTable = model.relationTables((fromEntity, fromRelationName))
+    val toTable = model.relationTables((toEntity, toRelationName))
+    (fromId: UUID, toId: UUID) => List(statement(fromTable, fromId, toId), statement(toTable, toId, fromId))
   }
-  def createBidirectionalRelation(model: OutputModel, fromEntity: String, fromRelationName: String): CassandraFunction[(UUID,UUID), Future[Any]] = {
+  def createBidirectionalRelation(model: OutputModel, fromEntity: String, fromRelationName: String): (UUID,UUID)=>List[Statement[_]] = {
     updateBidirectionalRelation(createDirectedRelationStatement, model, fromEntity, fromRelationName)
   }
-  def deleteBidirectionalRelation(model: OutputModel, fromEntity: String, fromRelationName: String): CassandraFunction[(UUID,UUID), Future[Any]] = {
+  def deleteBidirectionalRelation(model: OutputModel, fromEntity: String, fromRelationName: String): (UUID,UUID)=>List[Statement[_]] = {
     updateBidirectionalRelation(deleteDirectedRelationStatement, model, fromEntity, fromRelationName)
   }
-
 
 }
