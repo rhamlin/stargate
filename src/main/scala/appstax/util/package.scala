@@ -1,11 +1,9 @@
 package appstax
 
-import java.util
 import java.util.concurrent.TimeUnit
 
 import com.fasterxml.jackson.databind.{ObjectMapper, SerializationFeature}
 
-import scala.collection.JavaConverters.mapAsJavaMap
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -34,7 +32,7 @@ package object util {
   def scalaToJava(x: Object): Object = {
     x match {
       case x: List[Object] =>  x.map(scalaToJava).asJava
-      case x: Map[Object, Object] => mapAsJavaMap(x.map((kv:(Object,Object)) => (scalaToJava(kv._1), scalaToJava(kv._2))))
+      case x: Map[Object, Object] => (x.map((kv:(Object,Object)) => (scalaToJava(kv._1), scalaToJava(kv._2)))).asJava : java.util.Map[Object,Object]
       case x => x
     }
   }
