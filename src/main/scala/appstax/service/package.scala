@@ -36,6 +36,7 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
 
 
   def postSchema(appName: String, input: String, resp: HttpServletResponse): Unit = {
+    println(s"POSTING SCHEMA $appName, with $input")
     val model = appstax.schema.outputModel(appstax.model.parser.parseModel(input))
     val session = newSession(appName)
     implicit val ec: ExecutionContext = executor
@@ -50,7 +51,7 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
     val payloadMap = util.fromJson(input).asInstanceOf[Map[String,Object]]
     val query = model.input.queries(queryName)
     val runtimePayload = appstax.model.queries.transform(query, payloadMap)
-    runQuery(appName, query.entityName, "get", runtimePayload, resp)
+    runQuery(appName, query.entityName, "GET", runtimePayload, resp)
   }
 
 
@@ -82,7 +83,6 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
     resp.getWriter.write(util.toJson(entities))
   }
 
-
   def runQuery(appName: String, entity: String, op: String, input: String, resp: HttpServletResponse): Unit = {
     val payload = util.fromJson(input)
     runQuery(appName, entity, op, payload, resp)
@@ -94,13 +94,13 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
     println(payload)
 
     val result: Future[Object] = op match {
-      case "get" => {
+      case "GET" => {
         val result = queries.getAndTruncate(model, entity, payloadMap.get, defaultLimit, defaultTTL, session, executor)
         cacheStreams(result)
       }
-      case "create" => model.createWrapper(entity)(session, payload, executor)
-      case "update" => model.updateWrapper(entity)(session, payloadMap.get, executor)
-      case "delete" => model.deleteWrapper(entity)(session, payloadMap.get, executor)
+      case "POST" => model.createWrapper(entity)(session, payload, executor)
+      case "PUT" => model.updateWrapper(entity)(session, payloadMap.get, executor)
+      case "DELETE" => model.deleteWrapper(entity)(session, payloadMap.get, executor)
       case _ => Future.failed(new RuntimeException(s"unsupported op: ${op}"))
     }
     println(op, Await.result(result, Duration.Inf))
@@ -108,22 +108,38 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
   }
 
 
+  override def doPut(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+    route(req, resp)
+  }
+
+  override def doDelete(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+    route(req, resp)
+  }
+
+  override def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+    route(req, resp)
+  }
+
   override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
-    val path = req.getServletPath.split("/").toList.filter(_.nonEmpty)
-    val appName = path(0)
+    super.getServletContext
+    route(req, resp)
+  }
+
+  def route(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+    val op = req.getMethod
     val input = new String(req.getInputStream.readAllBytes())
-    if(path.length == 1) {
-      println("running schema post to " + appName)
-      postSchema(appName, input, resp)
-    } else if(path.length == 2) {
-      runPredefinedQuery(appName, path(1), input, resp)
-    } else if(path.length == 3) {
-      // cleanup / namespace these routes later
-      if (path(1) == "continue") {
-        continueQuery(appName, UUID.fromString(path(2)), resp)
-      } else {
-        runQuery(appName, path(1), path(2), input, resp)
-      }
+    val path = req.getServletPath
+    path match {
+      case s"/$appName/continue/${id}" =>
+        continueQuery(appName, UUID.fromString(id), resp)
+      case s"/${appName}/q/${query}" =>
+        runPredefinedQuery(appName, query, input, resp)
+      case s"/$appName/${entity}" =>
+        val payload = util.fromJson(input)
+        runQuery(appName, entity, op, payload, resp)
+      case s"/${appName}" =>
+        postSchema(appName, input, resp)
+      case _ => throw new RuntimeException(s"path: $path does not match /:appName/:entity/:id pattern")
     }
   }
 }

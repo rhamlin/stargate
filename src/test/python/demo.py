@@ -19,7 +19,7 @@ def push(counter = 0):
     print ("opening file at " + full_path)
     full_url = url + "/test"
     print("posting to " + full_url)
-    resp = requests.post(full_url, data=str(open(full_path).read()))
+    resp = requests.post(full_url, data=str(open(full_path).read()),  headers={"content-type":"multipart/form-data"})
     print(resp.headers)
     if resp.status_code != 200:
         if counter > 10:
@@ -30,7 +30,7 @@ def push(counter = 0):
 
 
 def create():
-    result = requests.post(url + "/test/Customer/create", json={
+    result = requests.post(url + "/test/Customer", json={
         "firstName": "Steve",
         # relation ops are: [link, unlink, replace], if none of these are specified, defaults to replace
         "addresses": {
@@ -67,14 +67,14 @@ def create():
 
 def get():
     # get all Customers with firstName=Daniel, include any related addresses and orders in results
-    result = requests.post(url + "/test/Customer/get", json={
+    result = requests.get(url + "/test/Customer", json={
         "-match":["firstName","=", "Steve"],
         "addresses":{},
         "orders":{}})
     printResult(result)
 
 def update():
-    result = requests.post(url + "/test/Customer/update", json={
+    result = requests.put(url + "/test/Customer", json={
         "-match":["firstName","=","Steve"],
         "lastName": "Danger",
         "addresses":{
@@ -84,7 +84,7 @@ def update():
     printResult(result)
 
 def predefinedGet(name = "Steve"):
-    result = requests.post(url + "/test/customerByFirstName", json={
+    result = requests.get(url + "/test/q/customerByFirstName", json={
         "-match":{
             "customerName": name
         }
