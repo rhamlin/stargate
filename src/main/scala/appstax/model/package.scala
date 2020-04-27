@@ -1,8 +1,7 @@
 package appstax
 
-import java.util
-
 import appstax.cassandra.{CassandraColumn, CassandraTable}
+import appstax.service.validations
 import appstax.util.AsyncList
 import com.datastax.oss.driver.api.core.CqlSession
 import com.datastax.oss.driver.api.core.`type`.{DataType, DataTypes}
@@ -14,14 +13,23 @@ package object model {
   object ScalarType extends Enumeration {
     class Value(val name: String, val cassandra: DataType, val convert: Object => Object) extends super.Val(name)
 
-    val INT = new Value("int", DataTypes.INT, identity)
-    val FLOAT = new Value("float", DataTypes.FLOAT, identity)
-    val STRING = new Value("string", DataTypes.TEXT, _.toString)
-    val UUID = new Value("uuid", DataTypes.UUID, {
-      case x: String => java.util.UUID.fromString(x)
-      case x => x
-    })
-    val names = appstax.util.enumerationNames(this).asInstanceOf[Map[String, Value]]
+    val ASCII_STRING = new Value("ascii_string", DataTypes.ASCII, validations.ascii)
+    val LONG = new Value("long", DataTypes.BIGINT, validations.bigInt)
+    val BLOB = new Value("blob", DataTypes.BLOB, validations.blob)
+    val BOOLEAN = new Value("boolean", DataTypes.BOOLEAN, validations.boolean)
+    val DATE = new Value("date", DataTypes.DATE, validations.date)
+    val DECIMAL = new Value("decimal", DataTypes.DECIMAL, validations.decimal)
+    val DOUBLE = new Value("double", DataTypes.DOUBLE, validations.double)
+    val FLOAT = new Value("float", DataTypes.FLOAT, validations.float)
+    val INT = new Value("int", DataTypes.INT, validations.int)
+    val SHORT = new Value("short", DataTypes.SMALLINT, validations.smallInt)
+    val STRING = new Value("string", DataTypes.TEXT, validations.text)
+    val TIME = new Value("time", DataTypes.TIME, validations.time)
+    val TIMESTAMP = new Value("timestamp", DataTypes.TIME, validations.timestamp)
+    val UUID = new Value("uuid", DataTypes.UUID, validations.uuid)
+    var BIG_INT = new Value("big_int", DataTypes.VARINT, validations.varInt)
+
+    val names: Map[String, Value] = appstax.util.enumerationNames(this).asInstanceOf[Map[String, Value]]
 
     def fromString(name: String) = names(name)
   }

@@ -1,20 +1,32 @@
 
 
-
+import os
 import json
 import requests
 
 url = "http://localhost:8080"
-url = "https://sandbox.non-prod.appstax.com"
+#url = "https://sandbox.non-prod.appstax.com"
 
 def printResult(result):
     print(json.dumps(json.loads(result.text), indent=True))
 
 
-def push():
-    resp = requests.post(url + "/test", data=str(open("/data/projects/stargate/src/main/resources/schema.conf").read()))
+def push(counter = 0):
+    counter += 1
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    schema_conf = "main/resources/schema.conf"
+    full_path = os.path.join(current_dir, "..", "..", schema_conf)
+    print ("opening file at " + full_path)
+    full_url = url + "/test"
+    print("posting to " + full_url)
+    resp = requests.post(full_url, data=str(open(full_path).read()))
+    print(resp.headers)
     if resp.status_code != 200:
-        push()
+        if counter > 10:
+            print('failed too many times baiiling out: Response code: ' + str(resp))
+            return
+        print('failed posting schema, trying again. Response code: ' + str(resp))
+        push(counter)
 
 
 def create():
@@ -95,4 +107,5 @@ def demo1():
     print("\n\ntest 4")
     predefinedGet()
 
-
+if __name__ == "__main__":
+    demo1()
