@@ -4,8 +4,8 @@ import java.util.concurrent.TimeUnit
 
 import com.datastax.oss.driver.api.core.CqlSession
 import com.typesafe.scalalogging.Logger
-import org.junit.{AfterClass, BeforeClass, Test}
 
+import scala.jdk.CollectionConverters._
 import scala.concurrent.duration._
 import scala.util.{Random, Try}
 
@@ -16,6 +16,7 @@ trait CassandraTest {
   val dataCenter = "datacenter1"
   var contacts = List(("localhost", 9042))
   val dockerId = "test-dse-" + UUID.randomUUID()
+  val _sessions = new java.util.concurrent.ConcurrentHashMap[UUID, CqlSession]()
   var alreadyRunning: Boolean = true
 
   def ensureCassandraRunning(): Unit = {
@@ -45,6 +46,7 @@ trait CassandraTest {
   }
 
   def cleanup(): Unit = {
+    _sessions.values.asScala.foreach(cleanupSession)
     if(!alreadyRunning) {
       val stop = util.process.exec(List("docker", "kill", dockerId)).get
       val rm = util.process.exec(List("docker", "rm", dockerId)).get
@@ -54,9 +56,12 @@ trait CassandraTest {
   def newSession: CqlSession = {
     val keyspace = ("keyspace" + Random.alphanumeric.take(10).mkString).toLowerCase
     logger.info("new cql session for keyspace: {}", keyspace)
-    cassandra.sessionWithNewKeyspace(contacts, dataCenter, keyspace, 1)
+    val session = cassandra.sessionWithNewKeyspace(contacts, dataCenter, keyspace, 1)
+    _sessions.put(UUID.randomUUID, session)
+    session
   }
   def cleanupSession(session: CqlSession) = {
+    logger.info(s"cleaning up keyspace ${session.getKeyspace.toString} and closing session: ${session.toString}")
     val tempSession = cassandra.wipeKeyspaceSession(contacts, dataCenter, session.getKeyspace.get.toString)
     tempSession.close
     session.close

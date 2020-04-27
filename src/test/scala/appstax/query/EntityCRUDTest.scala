@@ -175,7 +175,11 @@ class EntityCRUDTest {
     })
   }
 
-  def crudTest(model: OutputModel, session: CqlSession): Boolean = {
+  @Test
+  def crudTest: Unit = {
+    val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
+    val model = appstax.schema.outputModel(inputModel)
+    val session = EntityCRUDTest.newSession
     Await.result(Future.sequence(model.tables.map(t => appstax.cassandra.create(session, t))), Duration.Inf)
     model.input.entities.keys.foreach(entityName => {
       List.range(0, 20).foreach(_ => {
@@ -204,18 +208,8 @@ class EntityCRUDTest {
         diff(deleted, get6)
       })
     })
-    true
   }
-
-  @Test
-  def crudTest: Unit = {
-    val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
-    val model = appstax.schema.outputModel(inputModel)
-    val session = EntityCRUDTest.newSession
-    val test = Try(crudTest(model, session))
-    EntityCRUDTest.cleanupSession(session)
-    assert(test.get)
-  }
+  
 }
 
 object EntityCRUDTest extends CassandraTest {
