@@ -1,7 +1,7 @@
 package appstax.model
 
 import appstax.keywords
-import appstax.model.queries.{CreateMutation, CreateQuery, DeleteQuery, DeleteSelection, GetQuery, GetSelection, LinkMutation, Mutation, Query, RelationMutation, ReplaceMutation, UnlinkMutation, UpdateMutation, UpdateQuery}
+import appstax.model.queries.{GetQuery, GetSelection}
 import com.typesafe.config.{Config, ConfigFactory, ConfigList}
 
 import scala.collection.mutable
@@ -18,8 +18,8 @@ package object parser {
 
   def parseModel(config: Config): InputModel = {
     val entities = parseEntities(config.getConfig(keywords.config.ENTITIES))
-    val queries = parseQueries(config.getConfig(keywords.config.QUERIES))
-    val conditions = parseQueryConditions(config.getConfig(keywords.config.QUERY_CONDITIONS))
+    val queries = parseQueries(Try(config.getConfig(keywords.config.QUERIES)).getOrElse(ConfigFactory.empty))
+    val conditions = parseQueryConditions(Try(config.getConfig(keywords.config.QUERY_CONDITIONS)).getOrElse(ConfigFactory.empty))
     InputModel(entities, queries, conditions)
   }
 
