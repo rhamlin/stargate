@@ -62,7 +62,7 @@ def create():
                 }
             }
         ]
-    })
+    }, headers={"content-type":"application/json"})
     printResult(result)
 
 def get():
@@ -70,7 +70,7 @@ def get():
     result = requests.get(url + "/test/Customer", json={
         "-match":["firstName","=", "Steve"],
         "addresses":{},
-        "orders":{}})
+        "orders":{}}, headers={"content-type":"application/json"})
     printResult(result)
 
 def update():
@@ -80,7 +80,7 @@ def update():
         "addresses":{
             "-update":{
                 "-match":["customers.firstName","=","Steve"],
-                "street":"other st"}}})
+                "street":"other st"}}}, headers={"content-type":"application/json"})
     printResult(result)
 
 def predefinedGet(name = "Steve"):
@@ -88,7 +88,7 @@ def predefinedGet(name = "Steve"):
         "-match":{
             "customerName": name
         }
-    })
+    }, headers={"content-type":"application/json"})
     printResult(result)
 
 

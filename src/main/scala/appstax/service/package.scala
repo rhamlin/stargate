@@ -6,6 +6,7 @@ import java.util.concurrent._
 
 import appstax.model.OutputModel
 import appstax.queries.pagination.{StreamEntry, Streams}
+import appstax.service.{MaxMutationSizeException, MaximumRequestSizeException, SchemaToLargeException, http}
 import com.datastax.oss.driver.api.core.CqlSession
 import com.typesafe.config.{Config, ConfigFactory}
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
@@ -25,6 +26,10 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
 
   val defaultLimit: Int = config.getInt("defaultLimit")
   val defaultTTL: Int = config.getInt("defaultTTL")
+  val maxSchemaSize: Long = config.getLong("validation.maxSchemaSizeKB") * 1024
+  val maxMutationSize: Long = config.getLong("validation.maxMutationSizeKB") * 1024
+  val maxRequestSize: Long = config.getLong("validation.maxRequestSizeKB") * 1024
+
   import AppstaxServlet._
 
   def newSession(keyspace: String): CqlSession = {
@@ -36,7 +41,6 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
 
 
   def postSchema(appName: String, input: String, resp: HttpServletResponse): Unit = {
-    println(s"POSTING SCHEMA $appName, with $input")
     val model = appstax.schema.outputModel(appstax.model.parser.parseModel(input))
     val session = newSession(appName)
     implicit val ec: ExecutionContext = executor
@@ -99,7 +103,8 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
         cacheStreams(result)
       }
       case "POST" => model.createWrapper(entity)(session, payload, executor)
-      case "PUT" => model.updateWrapper(entity)(session, payloadMap.get, executor)
+      case "PUT" =>
+        model.updateWrapper(entity)(session, payloadMap.get, executor)
       case "DELETE" => model.deleteWrapper(entity)(session, payloadMap.get, executor)
       case _ => Future.failed(new RuntimeException(s"unsupported op: ${op}"))
     }
@@ -126,18 +131,28 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
   }
 
   def route(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+    val contentLength = req.getContentLengthLong
+    http.validateRequestSize(contentLength, maxRequestSize)
     val op = req.getMethod
-    val input = new String(req.getInputStream.readAllBytes())
-    val path = req.getServletPath
+    val path = http.sanitizePath(req.getServletPath)
     path match {
       case s"/$appName/continue/${id}" =>
+        http.validateJsonContentHeader(req)
         continueQuery(appName, UUID.fromString(id), resp)
       case s"/${appName}/q/${query}" =>
+        http.validateJsonContentHeader(req)
+        val input = new String(req.getInputStream.readAllBytes)
         runPredefinedQuery(appName, query, input, resp)
       case s"/${appName}/${entity}" =>
+        http.validateJsonContentHeader(req)
+        http.validateMutation(op, contentLength, maxMutationSize)
+        val input = new String(req.getInputStream.readAllBytes)
         val payload = util.fromJson(input)
         runQuery(appName, entity, op, payload, resp)
       case s"/${appName}" =>
+        http.validateFileHeader(req)
+        http.validateSchemaSize(contentLength, maxSchemaSize)
+        val input = new String(req.getInputStream.readAllBytes)
         postSchema(appName, input, resp)
       case _ => throw new RuntimeException(s"path: $path does not match /:appName/:entity/:id pattern")
     }
