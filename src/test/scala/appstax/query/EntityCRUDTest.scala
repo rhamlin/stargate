@@ -8,6 +8,7 @@ import appstax.schema.ENTITY_ID_COLUMN_NAME
 import com.datastax.oss.driver.api.core.CqlSession
 import com.typesafe.config.ConfigFactory
 import org.junit.{AfterClass, BeforeClass, Test}
+import org.junit.Assert._
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -29,14 +30,14 @@ class EntityCRUDTest {
     val id = Map((ENTITY_ID_COLUMN_NAME, response(ENTITY_ID_COLUMN_NAME)))
     val withFields = request.keys.filter(entity.fields.contains).foldLeft(id)((merge, field) => merge.updated(field, request.get(field).orNull))
     val withRelations = entity.relations.foldLeft(withFields)((merge, relation) => {
-      assert(request.contains(relation._1) == response.contains(relation._1))
+      assertEquals(request.contains(relation._1), response.contains(relation._1))
       if(!request.contains(relation._1)) {
         merge
       } else {
         val requestEntites = request(relation._1).asInstanceOf[List[Map[String,Object]]]
         val linkResponse = response(relation._1).asInstanceOf[Map[String,Object]]
         val idResponses = linkResponse(appstax.keywords.relation.LINK).asInstanceOf[List[Map[String,Object]]]
-        assert(requestEntites.length == idResponses.length)
+        assertEquals(requestEntites.length, idResponses.length)
         val zipped = requestEntites.zip(idResponses).map((req_resp) => zipEntityIds(model, relation._2.targetEntityName, req_resp._1, req_resp._2))
         merge ++ Map((relation._1, zipped))
       }
@@ -77,10 +78,10 @@ class EntityCRUDTest {
       if(getVal.isInstanceOf[List[Object]]) {
         val createVal = expected.get(field).map(_.asInstanceOf[List[Map[String,Object]]]).getOrElse(List.empty).sortBy(_(ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID])
         val getValList = getVal.asInstanceOf[List[Map[String,Object]]].sortBy(_(ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID])
-        assert(createVal.length == getValList.length)
+        assertEquals(createVal.length, getValList.length)
         createVal.zip(getValList).map(cg => diff(cg._1, cg._2))
       } else {
-        assert(getVal == expected(field), List(getVal, "=", expected(field)).toString)
+        assertEquals(getVal, expected(field))
       }
     })
   }
