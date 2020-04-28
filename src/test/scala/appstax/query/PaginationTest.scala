@@ -17,7 +17,7 @@ class PaginationTest {
     val c = List.range(0, branching).map(_ => Map.empty[String,Object])
     val b = List.range(0, branching).map(_ => Map(("c", c)))
     val a = List.range(0, branching).map(_ => Map(("b", b), ("c", c)))
-    model.createWrapper("A")(session, a, executor).map(_ => ())(executor)
+    model.mutation.create("A", a, session, executor).map(_ => ())(executor)
   }
 
   def query(model: OutputModel, limit: Int, branching: Int, session: CqlSession, executor: ExecutionContext): Unit = {

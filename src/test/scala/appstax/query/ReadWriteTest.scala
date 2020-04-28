@@ -8,6 +8,7 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import appstax.schema.ENTITY_ID_COLUMN_NAME
+import appstax.cassandra
 
 class ReadWriteTest {
 
@@ -23,17 +24,19 @@ class ReadWriteTest {
       model.input.entities.values.foreach(entity => {
         val tables = model.entityTables(entity.name)
         val random = appstax.model.generator.createEntity(model.input, entity.name, 1)
-        val (id, future) = appstax.queries.write.createEntity(tables, random, session, executor)
+        val (id, statements) = appstax.queries.write.createEntity(tables, random)
         val payload = random.updated(ENTITY_ID_COLUMN_NAME, id)
-        Await.result(Future.sequence(future.map(_.toList(executor))), Duration.Inf)
+        val future = statements.map(cassandra.executeAsync(session, _, executor).toList(executor))
+        Await.result(Future.sequence(future), Duration.Inf)
         tables.foreach(table => {
           val conditions = appstax.queries.write.tableConditionsForEntity(table, payload).map(_.get)
           val select = appstax.queries.read.selectStatement(table.name, conditions).build
           val rs = session.execute(select)
           assert(rs.iterator.asScala.toList.length == 1)
         })
-        val deleted = appstax.queries.write.deleteEntity(tables, payload, session, executor)
-        assert(Await.result(deleted, Duration.Inf)(ENTITY_ID_COLUMN_NAME) == id)
+        val deleteStatements = appstax.queries.write.deleteEntity(tables, payload)
+        val deleted = deleteStatements.map(cassandra.executeAsync(session, _, executor).toList(executor))
+        Await.result(Future.sequence(deleted), Duration.Inf)
         tables.foreach(table => {
           val conditions = appstax.queries.write.tableConditionsForEntity(table, payload).map(_.get)
           val select = appstax.queries.read.selectStatement(table.name, conditions).build
@@ -43,7 +46,6 @@ class ReadWriteTest {
       })
     })
   }
-
 
 }
 

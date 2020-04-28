@@ -102,10 +102,9 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
         val result = queries.getAndTruncate(model, entity, payloadMap.get, defaultLimit, defaultTTL, session, executor)
         cacheStreams(result)
       }
-      case "POST" => model.createWrapper(entity)(session, payload, executor)
-      case "PUT" =>
-        model.updateWrapper(entity)(session, payloadMap.get, executor)
-      case "DELETE" => model.deleteWrapper(entity)(session, payloadMap.get, executor)
+      case "POST" => model.mutation.create(entity, payload, session, executor)
+      case "PUT" => model.mutation.update(entity, payloadMap.get, session, executor)
+      case "DELETE" => model.mutation.delete(entity, payloadMap.get, session, executor)
       case _ => Future.failed(new RuntimeException(s"unsupported op: ${op}"))
     }
     println(op, Await.result(result, Duration.Inf))
