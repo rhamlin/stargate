@@ -6,36 +6,45 @@ import java.util.concurrent._
 
 import appstax.model.OutputModel
 import appstax.queries.pagination.{StreamEntry, Streams}
-import appstax.service.{MaxMutationSizeException, MaximumRequestSizeException, SchemaToLargeException, http}
+import appstax.service.http
 import com.datastax.oss.driver.api.core.CqlSession
+import com.swrve.ratelimitedlogger.RateLimitedLog
 import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.scalalogging.{LazyLogging, Logger}
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.servlet.{ServletHandler, ServletHolder}
 
+import scala.beans.BeanProperty
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 
-class AppstaxServlet(val config: Config) extends HttpServlet {
+class AppstaxServlet(val config: ParsedStarGateConfig) extends HttpServlet with LazyLogging {
 
   val apps = new ConcurrentHashMap[String, (CqlSession, OutputModel)]()
   val continuationCache = new ConcurrentHashMap[UUID, (StreamEntry,ScheduledFuture[Unit])]()
   val continuationCleaner: ScheduledExecutorService = Executors.newScheduledThreadPool(1)
 
-  val defaultLimit: Int = config.getInt("defaultLimit")
-  val defaultTTL: Int = config.getInt("defaultTTL")
-  val maxSchemaSize: Long = config.getLong("validation.maxSchemaSizeKB") * 1024
-  val maxMutationSize: Long = config.getLong("validation.maxMutationSizeKB") * 1024
-  val maxRequestSize: Long = config.getLong("validation.maxRequestSizeKB") * 1024
+  val defaultLimit: Int = config.defaultLimit
+  val defaultTTL: Int = config.defaultTTL
+  val maxSchemaSize: Long = config.maxSchemaSizeKB * 1024
+  val maxMutationSize: Long = config.maxMutationSizeKB * 1024
+  val maxRequestSize: Long = config.maxRequestSizeKB * 1024
+  val rateLimitedLog: RateLimitedLog  = RateLimitedLog
+    .withRateLimit(logger.underlying)
+    .maxRate(5).every(java.time.Duration.ofSeconds(10))
+    .build()
 
   import AppstaxServlet._
 
+
+
   def newSession(keyspace: String): CqlSession = {
-    val contacts = config.getConfig("cassandra").getConfigList("contactPoints").asScala.toList.map(c => (c.getString("host"), c.getInt("port")))
-    val dataCenter = config.getString("cassandra.dataCenter")
-    val replication = config.getInt("cassandra.replication")
+    val contacts = config.cassandraContactPoints.asScala.toList.map(c => (c.getString("host"), c.getInt("port")))
+    val dataCenter = config.cassandraDataCenter
+    val replication = config.cassandraReplication
     cassandra.sessionWithNewKeyspace(contacts, dataCenter, keyspace, replication)
   }
 
@@ -49,7 +58,6 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
     resp.getWriter.write(model.toString)
   }
 
-
   def runPredefinedQuery(appName: String, queryName: String, input: String, resp: HttpServletResponse): Unit = {
     val (session, model) = apps.get(appName)
     val payloadMap = util.fromJson(input).asInstanceOf[Map[String,Object]]
@@ -58,7 +66,6 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
     runQuery(appName, query.entityName, "GET", runtimePayload, resp)
   }
 
-
   def cacheStreams(truncatedFuture: Future[(List[Map[String,Object]], Streams)]): Future[List[Map[String,Object]]] = {
     truncatedFuture.map(truncated_streams => {
       val (truncated, streams) = truncated_streams
@@ -66,7 +73,7 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
         // dont allow cleanup to run until stream is actually added to cache
         val lock = new Semaphore(0)
         val cleanup: ScheduledFuture[Unit] = continuationCleaner.schedule(() => {
-          println("cleanup", continuationCache.keys, "-", stream._1)
+          logger.trace("cleanup", continuationCache.keys, "-", stream._1)
           lock.acquire()
           continuationCache.remove(stream._1)
           ()
@@ -77,6 +84,7 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
       truncated
     })(executor)
   }
+
   def continueQuery(appName: String, continueId: UUID, resp: HttpServletResponse): Unit = {
     val (session, model) = apps.get(appName)
     val (entry, cleanup) = continuationCache.remove(continueId)
@@ -95,7 +103,7 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
   def runQuery(appName: String, entity: String, op: String, payload: Object, resp: HttpServletResponse): Unit = {
     val (session, model) = apps.get(appName)
     val payloadMap = Try(payload.asInstanceOf[Map[String,Object]])
-    println(payload)
+    logger.trace(s"query payload: $payload")
 
     val result: Future[Object] = op match {
       case "GET" => {
@@ -107,10 +115,9 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
       case "DELETE" => model.mutation.delete(entity, payloadMap.get, session, executor)
       case _ => Future.failed(new RuntimeException(s"unsupported op: ${op}"))
     }
-    println(op, Await.result(result, Duration.Inf))
+    logger.trace(op, Await.result(result, Duration.Inf))
     resp.getWriter.write(util.toJson(Await.result(result, Duration.Inf)))
   }
-
 
   override def doPut(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
     route(req, resp)
@@ -130,30 +137,42 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
   }
 
   def route(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
-    val contentLength = req.getContentLengthLong
-    http.validateRequestSize(contentLength, maxRequestSize)
-    val op = req.getMethod
-    val path = http.sanitizePath(req.getServletPath)
-    path match {
-      case s"/$appName/continue/${id}" =>
-        http.validateJsonContentHeader(req)
-        continueQuery(appName, UUID.fromString(id), resp)
-      case s"/${appName}/q/${query}" =>
-        http.validateJsonContentHeader(req)
-        val input = new String(req.getInputStream.readAllBytes)
-        runPredefinedQuery(appName, query, input, resp)
-      case s"/${appName}/${entity}" =>
-        http.validateJsonContentHeader(req)
-        http.validateMutation(op, contentLength, maxMutationSize)
-        val input = new String(req.getInputStream.readAllBytes)
-        val payload = util.fromJson(input)
-        runQuery(appName, entity, op, payload, resp)
-      case s"/${appName}" =>
-        http.validateFileHeader(req)
-        http.validateSchemaSize(contentLength, maxSchemaSize)
-        val input = new String(req.getInputStream.readAllBytes)
-        postSchema(appName, input, resp)
-      case _ => throw new RuntimeException(s"path: $path does not match /:appName/:entity/:id pattern")
+    try {
+      val contentLength = req.getContentLengthLong
+      http.validateRequestSize(contentLength, maxRequestSize)
+      val op = req.getMethod
+      val path = http.sanitizePath(req.getServletPath)
+      logger.trace(s"http request: { path: '$path', method: '$op', content-length: $contentLength, content-type: '${req.getContentType}' }")
+      path match {
+        case s"/$appName/continue/${id}" =>
+          http.validateJsonContentHeader(req)
+          continueQuery(appName, UUID.fromString(id), resp)
+        case s"/${appName}/q/${query}" =>
+          http.validateJsonContentHeader(req)
+          val input = new String(req.getInputStream.readAllBytes)
+          runPredefinedQuery(appName, query, input, resp)
+        case s"/${appName}/${entity}" =>
+          http.validateJsonContentHeader(req)
+          http.validateMutation(op, contentLength, maxMutationSize)
+          val input = new String(req.getInputStream.readAllBytes)
+          val payload = util.fromJson(input)
+          runQuery(appName, entity, op, payload, resp)
+        case s"/${appName}" =>
+          http.validateFileHeader(req)
+          http.validateSchemaSize(contentLength, maxSchemaSize)
+          val input = new String(req.getInputStream.readAllBytes)
+          postSchema(appName, input, resp)
+        case _ =>
+          resp.setStatus(HttpServletResponse.SC_NOT_FOUND)
+          val msg = s"path: $path does not match /:appName/:entity/:id pattern"
+          rateLimitedLog.warn(msg)
+          resp.getWriter.write(util.toJson(msg))
+      }
+    } catch {
+      case e: Exception =>
+        rateLimitedLog.error(s"exception: $e")
+        resp.setStatus(HttpServletResponse.SC_BAD_GATEWAY)
+        resp.getWriter.write(util.toJson(e.getMessage))
     }
   }
 }
@@ -161,22 +180,75 @@ class AppstaxServlet(val config: Config) extends HttpServlet {
 object AppstaxServlet {
   val executor: ExecutionContext = ExecutionContext.global
 }
-
-
+case class ParsedStarGateConfig(
+                           @BeanProperty val httpPort: Int,
+                           @BeanProperty val defaultTTL: Int,
+                           @BeanProperty val defaultLimit: Int,
+                           @BeanProperty val maxSchemaSizeKB: Long,
+                           @BeanProperty val maxRequestSizeKB: Long,
+                           @BeanProperty val maxMutationSizeKB: Long,
+                           @BeanProperty val cassandraContactPoints: java.util.List[_ <: Config],
+                           @BeanProperty val cassandraDataCenter: String,
+                           @BeanProperty val cassandraReplication: Int)
 object Main {
 
+  private def mapConfig(config: Config):ParsedStarGateConfig = {
+    ParsedStarGateConfig(
+      config.getInt("http.port"),
+      config.getInt("defaultTTL"),
+      config.getInt("defaultLimit"),
+      config.getLong("validation.maxSchemaSizeKB"),
+      config.getLong("validation.maxMutationSizeKB"),
+      config.getLong("validation.maxRequestSizeKB"),
+      config.getConfigList("cassandra.contactPoints"),
+      config.getString("cassandra.dataCenter"),
+      config.getInt("cassandra.replication")
+    )
+  }
+
   def main(args: Array[String]) = {
+    val logger = Logger("main")
+
     val config = (if (args.length > 0) ConfigFactory.parseFile(new File(args(0))).resolve() else ConfigFactory.defaultApplication()).resolve()
-
-    val server = new org.eclipse.jetty.server.Server(config.getInt("http.port"))
+    val parsedConfig = mapConfig(config)
+    logger.info(s"parsedConfig: ${util.toPrettyJson(parsedConfig)}")
+    val server = new org.eclipse.jetty.server.Server(parsedConfig.httpPort)
     val handler = new ServletHandler()
-    val servlet = new AppstaxServlet(config)
-
+    val servlet = new AppstaxServlet(parsedConfig)
     handler.addServletWithMapping(new ServletHolder(servlet), "/")
     server.setHandler(handler)
+    logger.info("Launch Mission To StarGate" )
+    logger.info(" -----------")
+    logger.info("|         * |")
+    logger.info("| *         |")
+    logger.info("|    *      |")
+    logger.info("|         * |")
+    logger.info("|    *      |")
+    logger.info(" -----------")
+    logger.info("            ")
+    logger.info("            ")
+    logger.info("            ")
+    logger.info("     ^^")
+    logger.info("    ^^^^")
+    logger.info("   ^^^^^^")
+    logger.info("  ^^^^^^^^")
+    logger.info(" ^^^^^^^^^^")
+    logger.info("   ^^^^^^")
+    logger.info("     ||| ")
+    logger.info("     ||| ")
+    logger.info("     ||| ")
+    logger.info("     ||| ")
+    logger.info("      | ")
+    logger.info("      | ")
+    logger.info("      | ")
+    logger.info("        ")
+    logger.info("      |  ")
+    logger.info("0000     0000")
+    logger.info("00000   00000")
+    logger.info("============  ")
+    logger.info(s"StarGate Version: 1.0.0")
     server.start
     server.join
-
   }
 }
 
