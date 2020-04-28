@@ -66,12 +66,12 @@ package object write {
     })
   }
 
-  def deleteEntity(tables: List[CassandraTable], entity: Map[String,Object]): (Map[String,Object], List[SimpleStatement]) = {
+  def deleteEntity(tables: List[CassandraTable], entity: Map[String,Object]): List[SimpleStatement] = {
     val deleteResults = tables.map(table => deleteStatement(table, entity))
-    (entityIdPayload(entity), deleteResults.filter(_.isDefined).map(_.get.build))
+    deleteResults.filter(_.isDefined).map(_.get.build)
   }
 
-  def updateEntity(tables: List[CassandraTable], currentEntity: Map[String,Object], changes: Map[String,Object]): (Map[String,Object], List[SimpleStatement]) = {
+  def updateEntity(tables: List[CassandraTable], currentEntity: Map[String,Object], changes: Map[String,Object]): List[SimpleStatement] = {
     val updateStatements = tables.map(table => {
       val keyChanged = table.columns.key.combined.exists(col => changes.get(col.name).orNull != null)
       if(keyChanged) {
@@ -87,7 +87,7 @@ package object write {
         maybeInsert.toList.map(_.build)
       }
     })
-    (entityIdPayload(currentEntity), updateStatements.flatten)
+    updateStatements.flatten
   }
 
   def createDirectedRelationStatement(tableName: String, from: UUID, to: UUID): SimpleStatement = {
