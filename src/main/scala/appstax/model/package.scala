@@ -86,14 +86,12 @@ package object model {
 
     def getWrapper(entityName: String)(session: CqlSession, payload: Map[String,Object], executor: ExecutionContext): AsyncList[Map[String, Object]] =
       appstax.queries.get(this, entityName, payload, session, executor)
-    def mutationWrapper(entityName: String)(session: CqlSession, payload: Map[String,Object], executor: ExecutionContext): Future[List[Map[String, Object]]] =
-      appstax.queries.mutation(this, entityName, payload, session, executor)
     def createWrapper(entityName: String)(session: CqlSession, payload: Object, executor: ExecutionContext): Future[List[Map[String, Object]]] =
-      appstax.queries.create(this, entityName, payload, session, executor)
+      appstax.queries.createUnbatched(this, entityName, payload, session, executor)
     def updateWrapper(entityName: String)(session: CqlSession, payload: Map[String,Object], executor: ExecutionContext): Future[List[Map[String, Object]]] =
-      appstax.queries.update(this, entityName, payload, session, executor)
+      appstax.queries.updateUnbatched(this, entityName, payload, session, executor)
     def deleteWrapper(entityName: String)(session: CqlSession, payload: Map[String,Object], executor: ExecutionContext): Future[List[Map[String, Object]]] =
-      appstax.queries.delete(this, entityName, payload, session, executor)
+      appstax.queries.deleteUnbatched(this, entityName, payload, session, executor)
   }
 
 }
