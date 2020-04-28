@@ -6,12 +6,13 @@ import appstax.cassandra.{CassandraFunction, _}
 import appstax.model._
 import appstax.util.AsyncList
 import com.datastax.oss.driver.api.core.CqlSession
-import com.datastax.oss.driver.api.core.cql.SimpleStatement
+import com.datastax.oss.driver.api.core.cql.{BatchStatementBuilder, BatchType, BatchableStatement, SimpleStatement}
 import com.datastax.oss.driver.api.querybuilder.QueryBuilder
 import com.datastax.oss.driver.api.querybuilder.term.Term
 import com.datastax.oss.driver.internal.core.util.Strings
 import com.typesafe.scalalogging.Logger
 
+import scala.jdk.CollectionConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
@@ -334,6 +335,24 @@ package object queries {
   }
   def deleteUnbatched(model: OutputModel, entityName: String, payload: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
     writeUnbatched(delete(model, entityName, payload, session, executor), session, executor)
+  }
+  def writeBatched(result: MutationResult, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
+    result.flatMap(entities_statements => {
+      val (entities, statements) = entities_statements
+      val batchStatements: java.lang.Iterable[BatchableStatement[SimpleStatement]] = statements.map(x => x:BatchableStatement[SimpleStatement]).asJava
+      val batch = new BatchStatementBuilder(BatchType.LOGGED).addStatements(batchStatements).build
+      val results = cassandra.executeAsync(session, batch, executor).toList(executor)
+      results.map(_ => entities)(executor)
+    })(executor)
+  }
+  def createBatched(model: OutputModel, entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
+    writeBatched(create(model, entityName, payload, session, executor), session, executor)
+  }
+  def updateBatched(model: OutputModel, entityName: String, payload: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
+    writeBatched(update(model, entityName, payload, session, executor), session, executor)
+  }
+  def deleteBatched(model: OutputModel, entityName: String, payload: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
+    writeBatched(delete(model, entityName, payload, session, executor), session, executor)
   }
 
 
