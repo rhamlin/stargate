@@ -16,6 +16,8 @@ limitations under the License.
 package cmd
 
 import (
+	"errors"
+
 	"github.com/datastax/stargate/cli/pkg/docker"
 
 	"github.com/spf13/cobra"
@@ -32,6 +34,8 @@ var serviceCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(serviceCmd)
 
+	var WithCassandra bool
+
 	serviceCmd.AddCommand(&cobra.Command{
 		Short:   "Stop a local stargate service",
 		Long:    `Stop a local stargate service`,
@@ -42,6 +46,14 @@ func init() {
 			client, err := docker.NewClient()
 			if err != nil {
 				cmd.PrintErrln(err)
+				return
+			}
+			if WithCassandra {
+				err = client.Stop("cassandra")
+				if err != nil {
+					cmd.PrintErrln(err)
+					return
+				}
 			}
 			err = client.Stop("service")
 			if err != nil {
@@ -62,6 +74,14 @@ func init() {
 			client, err := docker.NewClient()
 			if err != nil {
 				cmd.PrintErrln(err)
+				return
+			}
+			if WithCassandra {
+				err = client.Remove("cassandra")
+				if err != nil {
+					cmd.PrintErrln(err)
+					return
+				}
 			}
 			err = client.Remove("service")
 			if err != nil {
@@ -82,11 +102,28 @@ func init() {
 			client, err := docker.NewClient()
 			if err != nil {
 				cmd.PrintErrln(err)
+				return
+			}
+			if WithCassandra && len(args) == 1 {
+				cmd.PrintErrln(errors.New("If you are starting with --with-cassandra, you should not specify a cassandra host"))
+				return
 			}
 			cassandraURL := "stargate-cassandra"
 			if len(args) == 1 {
 				cassandraURL = args[0]
 			}
+
+			if WithCassandra {
+				err = client.StartCassandra(&docker.StartCassandraOptions{
+					DockerImageHost: "docker.io/library/",
+					ImageName:       "cassandra",
+				})
+				if err != nil {
+					cmd.PrintErrln(err)
+					return
+				}
+			}
+
 			err = client.StartService(&docker.StartServiceOptions{
 				CassandraURL:    cassandraURL,
 				ExposedPorts:    []string{"8080"},
@@ -100,4 +137,6 @@ func init() {
 			}
 		},
 	})
+
+	serviceCmd.PersistentFlags().BoolVarP(&WithCassandra, "with-cassandra", "c", false, "WithCassandra output")
 }
