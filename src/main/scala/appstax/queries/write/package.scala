@@ -99,18 +99,18 @@ package object write {
       .whereColumn(Strings.doubleQuote(schema.RELATION_TO_COLUMN_NAME)).isEqualTo(QueryBuilder.literal(to)).build
   }
 
-  def updateBidirectionalRelation(statement: (String,UUID,UUID) => Statement[_], model: OutputModel, fromEntity: String, fromRelationName: String): (UUID,UUID)=>List[Statement[_]] = {
+  def updateBidirectionalRelation(statement: (String,UUID,UUID) => SimpleStatement, model: OutputModel, fromEntity: String, fromRelationName: String): (UUID,UUID)=>List[SimpleStatement] = {
     val fromRelation =  model.input.entities(fromEntity).relations(fromRelationName)
     val toEntity = fromRelation.targetEntityName
     val toRelationName = fromRelation.inverseName
     val fromTable = model.relationTables((fromEntity, fromRelationName))
     val toTable = model.relationTables((toEntity, toRelationName))
-    (fromId: UUID, toId: UUID) => List(statement(fromTable, fromId, toId), statement(toTable, toId, fromId))
+    (fromId: UUID, toId: UUID) => List(statement(fromTable.name, fromId, toId), statement(toTable.name, toId, fromId))
   }
-  def createBidirectionalRelation(model: OutputModel, fromEntity: String, fromRelationName: String): (UUID,UUID)=>List[Statement[_]] = {
+  def createBidirectionalRelation(model: OutputModel, fromEntity: String, fromRelationName: String): (UUID,UUID)=>List[SimpleStatement] = {
     updateBidirectionalRelation(createDirectedRelationStatement, model, fromEntity, fromRelationName)
   }
-  def deleteBidirectionalRelation(model: OutputModel, fromEntity: String, fromRelationName: String): (UUID,UUID)=>List[Statement[_]] = {
+  def deleteBidirectionalRelation(model: OutputModel, fromEntity: String, fromRelationName: String): (UUID,UUID)=>List[SimpleStatement] = {
     updateBidirectionalRelation(deleteDirectedRelationStatement, model, fromEntity, fromRelationName)
   }
 
