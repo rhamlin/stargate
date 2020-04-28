@@ -339,8 +339,8 @@ package object queries {
   def writeBatched(result: MutationResult, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
     result.flatMap(entities_statements => {
       val (entities, statements) = entities_statements
-      val batchStatements: java.lang.Iterable[BatchableStatement[SimpleStatement]] = statements.map(x => x:BatchableStatement[SimpleStatement]).asJava
-      val batch = new BatchStatementBuilder(BatchType.LOGGED).addStatements(batchStatements).build
+      val builder = new BatchStatementBuilder(BatchType.LOGGED)
+      val batch = statements.foldLeft(builder)((batch, statement) => batch.addStatement(statement)).build
       val results = cassandra.executeAsync(session, batch, executor).toList(executor)
       results.map(_ => entities)(executor)
     })(executor)
