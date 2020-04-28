@@ -79,35 +79,40 @@ package object model {
     relationTables: Map[(String,String), CassandraTable]) {
 
     def tables: List[CassandraTable] = (entityTables.values.flatten ++ relationTables.values).toList
+
     def createTables(session: CqlSession, executor: ExecutionContext): Future[Unit] = {
       implicit val ec: ExecutionContext = executor
       Future.sequence(this.tables.map(cassandra.create(session, _))).map(_ => ())
     }
 
-    def get(entityName: String, payload: Map[String,Object], session: CqlSession, executor: ExecutionContext): AsyncList[Map[String, Object]] =
+    def get(entityName: String, payload: Map[String, Object], session: CqlSession, executor: ExecutionContext): AsyncList[Map[String, Object]] =
       appstax.queries.get(this, entityName, payload, session, executor)
-
-    trait MutationOps {
-      def create(entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]]
-      def update(entityName: String, payload: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]]
-      def delete(entityName: String, payload: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]]
-    }
 
     val model: OutputModel = this
     val mutation: MutationOps = new MutationOps {
       override def create(entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]] =
         appstax.queries.createUnbatched(model, entityName, payload, session, executor)
+
       override def update(entityName: String, payload: Map[String, Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]] =
         appstax.queries.updateUnbatched(model, entityName, payload, session, executor)
+
       override def delete(entityName: String, payload: Map[String, Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]] =
         appstax.queries.deleteUnbatched(model, entityName, payload, session, executor)
     }
     val batchMutation: MutationOps = new MutationOps {
       override def create(entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]] =
         appstax.queries.createBatched(model, entityName, payload, session, executor)
+
       override def update(entityName: String, payload: Map[String, Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]] =
         appstax.queries.updateBatched(model, entityName, payload, session, executor)
+
       override def delete(entityName: String, payload: Map[String, Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]] =
         appstax.queries.deleteBatched(model, entityName, payload, session, executor)
     }
+  }
+  trait MutationOps {
+    def create(entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]]
+    def update(entityName: String, payload: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]]
+    def delete(entityName: String, payload: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]]
+  }
 }
