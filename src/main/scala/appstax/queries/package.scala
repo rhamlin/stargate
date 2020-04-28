@@ -13,15 +13,11 @@ import com.datastax.oss.driver.internal.core.util.Strings
 import com.typesafe.scalalogging.Logger
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 package object queries {
 
   val logger = Logger("queries")
-
-  val updateRelationFunctions: Map[String, (OutputModel, String, List[UUID], String, Map[String,Object], CqlSession, ExecutionContext) => (Map[String,Object], List[SimpleStatement])] = Map(
-    (keywords.relation.LINK, relationLinkOne),
-    (keywords.relation.UNLINK, relationUnlinkOne)
-  )
 
   type CassandraPagedFunction[I,O] = CassandraFunction[I, PagedResults[O]]
   type CassandraGetFunction[T] = CassandraPagedFunction[Map[String, Object], T]
@@ -138,85 +134,44 @@ package object queries {
     getAndTruncate(model, entityName, payload, defaultLimit, 0, session, executor).map(_._1)(executor)
   }
 
-
-  def relationUpdateOne(update: (OutputModel, String, String) => ((UUID,UUID)=>List[SimpleStatement]),
-                       model: OutputModel, entityName: String, parentIds: List[UUID], relationName: String, payload: Map[String,Object], session: CqlSession, executor: ExecutionContext): (Map[String,Object], List[SimpleStatement]) = {
-    val targetId = payload(schema.ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID]
-    val linkFunc = update(model, entityName, relationName)
-    val linkResults = parentIds.map(parentId => linkFunc(parentId, targetId))
-    (payload, linkResults.flatten)
+  def relationLink(model: OutputModel, entityName: String, parentId: UUID, relationName: String, payload: List[Map[String,Object]]): List[SimpleStatement] = {
+    payload.map(_(schema.ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID]).flatMap(id => write.createBidirectionalRelation(model, entityName, relationName)(parentId, id))
   }
-  def relationLinkOne(model: OutputModel, entityName: String, parentIds: List[UUID], relationName: String, payload: Map[String,Object], session: CqlSession, executor: ExecutionContext): (Map[String,Object], List[SimpleStatement]) = {
-    relationUpdateOne(write.createBidirectionalRelation, model, entityName, parentIds, relationName, payload, session, executor)
+  def relationUnlink(model: OutputModel, entityName: String, parentId: UUID, relationName: String, payload: List[Map[String,Object]]): List[SimpleStatement] = {
+    payload.map(_(schema.ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID]).flatMap(id => write.deleteBidirectionalRelation(model, entityName, relationName)(parentId, id))
   }
-  def relationUnlinkOne(model: OutputModel, entityName: String, parentIds: List[UUID], relationName: String, payload: Map[String,Object], session: CqlSession, executor: ExecutionContext): (Map[String,Object], List[SimpleStatement]) = {
-    relationUpdateOne(write.deleteBidirectionalRelation, model, entityName, parentIds, relationName, payload, session, executor)
-  }
-
-  def relationUpdate(relationOp: String, model: OutputModel, entityName: String, parentIds: List[UUID], relationName: String, payload: List[Map[String,Object]], session: CqlSession, executor: ExecutionContext): (Map[String,List[Map[String,Object]]], List[SimpleStatement]) = {
-    val updateOne = updateRelationFunctions(relationOp)
-    val result = payload.map(targetEntity => updateOne(model, entityName, parentIds, relationName, targetEntity, session, executor))
-    (Map((relationOp, result.map(_._1))), result.flatMap(_._2))
-  }
-  def relationLink(model: OutputModel, entityName: String, parentIds: List[UUID], relationName: String, payload: List[Map[String,Object]], session: CqlSession, executor: ExecutionContext): RelationMutationResult = {
-    Future.successful(relationUpdate(keywords.relation.LINK, model, entityName, parentIds, relationName, payload, session, executor))
-  }
-  def relationUnlink(model: OutputModel, entityName: String, parentIds: List[UUID], relationName: String, payload: List[Map[String,Object]], session: CqlSession, executor: ExecutionContext): RelationMutationResult = {
-    Future.successful(relationUpdate(keywords.relation.UNLINK, model, entityName, parentIds, relationName, payload, session, executor))
-  }
-  def relationReplace(model: OutputModel, entityName: String, parentIds: List[UUID], relationName: String, payload: List[Map[String,Object]], session: CqlSession, executor: ExecutionContext): RelationMutationResult = {
-    val unlinkedIds = resolveRelations(model, entityName, List(relationName), AsyncList.fromList(parentIds), session, executor)
-    val unlinkedIdsPayloadFuture = unlinkedIds.toList(executor).map(ids => ids.map(write.entityIdPayload))(executor)
-    val unlinkResult = unlinkedIdsPayloadFuture.flatMap(unlinkedIdPayloads => relationUnlink(model, entityName, parentIds, relationName, unlinkedIdPayloads, session, executor))(executor)
-    unlinkResult.flatMap(unlinked => {
-      // wait until unlink has completed before linking
-      val linkResult = relationLink(model, entityName, parentIds, relationName, payload, session, executor)
-      linkResult.map(linked => (linked._1 ++ unlinked._1, unlinked._2 ++ linked._2))(executor)
-    })(executor)
-  }
-
-  // payload is a list of entities wrapped in link/unlink/replace.  perform whichever link operation is specified between parent ids and child ids
-  def relationChange(model: OutputModel, entityName: String, parentIds: List[UUID], relationName: String, payload: Map[String,List[Map[String,Object]]], session: CqlSession, executor: ExecutionContext): RelationMutationResult = {
-    // assumes that relationMutation will only return payloads containing one of the following ops: (link), (unlink), (replace), or (link and unlink)
-    val emptyDefault = Future.successful((Map.empty[String,List[Map[String,Object]]], List.empty[SimpleStatement]))
-    val linked = if(payload.contains(keywords.relation.LINK)) {
-      relationLink(model, entityName, parentIds, relationName, payload(keywords.relation.LINK), session, executor)
-    } else { emptyDefault }
-    val unlinked = if(payload.contains(keywords.relation.UNLINK)) {
-      relationUnlink(model, entityName, parentIds, relationName, payload(keywords.relation.UNLINK), session, executor)
-    } else { emptyDefault }
-    val replaced = if(payload.contains(keywords.relation.REPLACE)) {
-      relationReplace(model, entityName, parentIds, relationName, payload(keywords.relation.REPLACE), session, executor)
-    } else { emptyDefault }
-    implicit val ec: ExecutionContext = executor
-    Future.sequence(List(linked, unlinked, replaced)).map(merged => (merged.flatMap(_._1).toMap, merged.flatMap(_._2)))
+  // payload is a list of entities wrapped in link or unlink.  perform whichever link operation is specified between parent ids and child ids
+  def relationChange(model: OutputModel, entityName: String, parentId: UUID, relationName: String, payload: Map[String,List[Map[String,Object]]]): List[SimpleStatement] = {
+    val linked = payload.get(keywords.relation.LINK).map(relationLink(model, entityName, parentId, relationName, _)).getOrElse(List.empty)
+    val unlinked = payload.get(keywords.relation.UNLINK).map(relationUnlink(model, entityName, parentId, relationName, _)).getOrElse(List.empty)
+    linked ++ unlinked
   }
 
   // perform nested mutation, then take result (child entities wrapped in either link/unlink/replace) and update relations to parent ids
-  def mutateAndLinkRelations(model: OutputModel, entityName: String, entityIds: List[UUID], payloadMap: Map[String,Object], session: CqlSession, executor: ExecutionContext): MutationResult = {
+  def mutateAndLinkRelations(model: OutputModel, entityName: String, entityId: UUID, payloadMap: Map[String,Object], session: CqlSession, executor: ExecutionContext): MutationResult = {
     implicit val ec: ExecutionContext = executor
     val relationMutationResults = model.input.entities(entityName).relations.filter(x => payloadMap.contains(x._1)).map((name_relation: (String, RelationField)) => {
       val (relationName, relation) = name_relation
-      (relationName, relationMutation(model, relation.targetEntityName, payloadMap(relationName), session, executor))
+      (relationName, relationMutation(model, entityName, entityId, relation.name, relation.targetEntityName, payloadMap(relationName), session, executor))
     })
     val relationLinkResults = relationMutationResults.map((name_result: (String,RelationMutationResult)) => {
       val (relationName, result) = name_result
-      result.flatMap(idObjects => {
-        val changeResult = relationChange(model, entityName, entityIds, relationName, idObjects._1, session, executor)
-        changeResult.map(changes => (changes._1, changes._2 ++ idObjects._2))
+      result.map(relations_statements => {
+        val (relationChanges, mutationStatements) = relations_statements
+        val relationStatements = relationChange(model, entityName, entityId, relationName, relationChanges)
+        ((relationName, relationChanges), relationStatements ++ mutationStatements)
       })(executor)
     })
-    Future.sequence(relationLinkResults).map(linkResult => {
-      val relations = linkResult.flatMap(_._1).toMap
-      val statements = linkResult.flatMap(_._2).toList
-      val entities = entityIds.map(id => write.entityIdPayload(id) ++ relations)
-      (entities, statements)
+    Future.sequence(relationLinkResults).map(relations_statements => {
+      val (relations, statements) = relations_statements.unzip
+      val entity: List[Map[String,Object]] = List(write.entityIdPayload(entityId) ++ relations.toMap)
+      (entity, statements.toList.flatten)
     })
   }
 
   def createOne(model: OutputModel, entityName: String, payload: Map[String,Object], session: CqlSession, executor: ExecutionContext): MutationResult = {
     val (uuid, creates) = write.createEntity(model.entityTables(entityName), payload)
-    val linkResults = mutateAndLinkRelations(model, entityName, List(uuid), payload, session, executor)
+    val linkResults = mutateAndLinkRelations(model, entityName, uuid, payload, session, executor)
     linkResults.map(linkResult => (linkResult._1, creates ++ linkResult._2))(executor)
   }
 
@@ -230,8 +185,7 @@ package object queries {
   }
 
   def create(model: OutputModel, entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): MutationResult = {
-    val isList = payload.isInstanceOf[List[Map[String,Object]]]
-    val payloadList: List[Map[String,Object]] = if(isList) payload.asInstanceOf[List[Map[String,Object]]] else List(payload.asInstanceOf[Map[String,Object]])
+    val payloadList = Try(payload.asInstanceOf[List[Map[String,Object]]]).getOrElse(List(payload.asInstanceOf[Map[String,Object]]))
     val convertedPayloads = convertPayloadToColumnTypes(payloadList, model.input.entities(entityName).fields)
     val creates = convertedPayloads.map(createOne(model, entityName, _, session, executor))
     implicit val ec: ExecutionContext = executor
@@ -246,9 +200,9 @@ package object queries {
     val results = ids.map(id => {
       val futureMaybeEntity = read.entityIdToObject(model, entityName, id, session, executor)
       futureMaybeEntity.map(_.map(currentEntity => {
-        val updateResult = write.updateEntity(model.entityTables(entityName), currentEntity, payload)
-        val linkResults = mutateAndLinkRelations(model, entityName, List(id), payload, session, executor)
-        linkResults.map(linkResult => (linkResult._1, updateResult._2 ++ linkResult._2))(executor)
+        val updates = write.updateEntity(model.entityTables(entityName), currentEntity, payload)
+        val linkResults = mutateAndLinkRelations(model, entityName, id, payload, session, executor)
+        linkResults.map(linkResult => (linkResult._1, updates ++ linkResult._2))(executor)
       }))(executor)
     }, executor)
     val filtered = AsyncList.unfuture(AsyncList.filterSome(AsyncList.unfuture(results, executor), executor), executor).toList(executor)
@@ -269,19 +223,23 @@ package object queries {
       val futureMaybeEntity = read.entityIdToObject(model, entityName, id, session, executor)
       futureMaybeEntity.map(_.map(entity => {
         val deleteCurrent = write.deleteEntity(model.entityTables(entityName),entity)
-        val childResult = relations.map((name_relation:(String, RelationField)) => {
+        val childResults = relations.map((name_relation:(String, RelationField)) => {
           val (relationName, relation) = name_relation
           val childIds = resolveRelations(model, entityName, List(relationName), AsyncList.singleton(id), session, executor)
-          val unlink = childIds.map(childId => write.deleteBidirectionalRelation(model, entityName, relationName)(id, childId), executor)
+          // TODO: dont double delete inverse relations
+          val unlinks = childIds.map(childId => write.deleteBidirectionalRelation(model, entityName, relationName)(id, childId), executor).toList(executor)
           val recurse = if(payload.contains(relationName)) {
             delete(model, relation.targetEntityName, childIds, payload(relationName).asInstanceOf[Map[String, Object]], session, executor).map(x => (List((relationName, x._1)), x._2))
           } else {
             Future.successful((List.empty, List.empty))
           }
           // make recurse-delete future depend on links being deleted
-          unlink.toList(executor).flatMap(unlinks => recurse.map(recurse => (recurse._1, unlinks.flatten ++ recurse._2) ))
+          unlinks.flatMap(unlinks => recurse.map(recurse => (recurse._1, unlinks.flatten ++ recurse._2) ))
         })
-        Future.sequence(childResult).map(relationMaps => (deleteCurrent._1 ++ relationMaps.flatMap(_._1).toMap[String,Object], deleteCurrent._2 ++ relationMaps.flatMap(_._2).toList))
+        Future.sequence(childResults).map(relations_statements => {
+          val (relations, statements) = relations_statements.unzip
+          (write.entityIdPayload(id) ++ relations.flatten.toMap, deleteCurrent ++ statements.flatten)
+        })
       }))(executor)
     }, executor)
     val filtered = AsyncList.unfuture(AsyncList.filterSome(AsyncList.unfuture(results, executor), executor), executor).toList(executor)
@@ -316,29 +274,31 @@ package object queries {
     }
   }
 
-  def unbatchedMutation(model: OutputModel, entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
-    mutation(model, entityName, payload, session, executor).flatMap(entities_statements => {
-      val (entities, statements) = entities_statements
-      val results = statements.map(cassandra.executeAsync(session, _, executor).toList(executor))
-      implicit val ec: ExecutionContext = executor
-      Future.sequence(results).map(_ => entities)
-    })(executor)
-  }
-
   def linkMutation(model: OutputModel, entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): RelationMutationResult = {
     mutation(model, entityName, payload, session, executor).map(x => (Map((keywords.relation.LINK, x._1)), x._2))(executor)
   }
   def unlinkMutation(model: OutputModel, entityName: String, conditions: List[Object], session: CqlSession, executor: ExecutionContext): RelationMutationResult = {
     matchMutation(model, entityName, conditions, session, executor).map(x => (Map((keywords.relation.UNLINK, x._1)), x._2))(executor)
   }
-  def replaceMutation(model: OutputModel, entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): RelationMutationResult = {
-    mutation(model, entityName, payload, session, executor).map(x => (Map((keywords.relation.REPLACE, x._1)), x._2))(executor)
+  def replaceMutation(model: OutputModel, parentEntityName: String, parentId: UUID, parentRelation: String, entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): RelationMutationResult = {
+    val linkMutationResult = mutation(model, entityName, payload, session, executor)
+    linkMutationResult.flatMap(linked_statements => {
+      val (linkObjects, mutationStatements) = linked_statements
+      val linkIds = linkObjects.map(_(appstax.schema.ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID]).toSet
+      val relatedIds = resolveRelations(model, parentEntityName, List(parentRelation), AsyncList.singleton(parentId), session, executor)
+      val unlinkIds = relatedIds.toList(executor).map(_.toSet.diff(linkIds).toList)(executor)
+      unlinkIds.map(unlinkIds => {
+        val unlinkObjects = unlinkIds.map(write.entityIdPayload)
+        (Map((keywords.relation.LINK, linkObjects),(keywords.relation.UNLINK, unlinkObjects)), mutationStatements)
+      })(executor)
+    })(executor)
+
   }
   // perform nested mutation (create/update/match), then wrap resulting entity ids with link/unlink/replace to be handled by parent entity
-  def relationMutation(model: OutputModel, entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): RelationMutationResult = {
+  def relationMutation(model: OutputModel, parentEntityName: String, parentId: UUID, parentRelation: String, entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): RelationMutationResult = {
     if(payload.isInstanceOf[List[Object]]) {
       // if given a list, default to replacing with list of created
-      replaceMutation(model, entityName, payload, session, executor)
+      replaceMutation(model, parentEntityName, parentId, parentRelation, entityName, payload, session, executor)
     } else if(payload.isInstanceOf[Map[String,Object]]) {
       val payloadMap = payload.asInstanceOf[Map[String,Object]]
       // TODO: change else-if conditions to allow both link and unlink, but not replace at the same time
@@ -347,14 +307,33 @@ package object queries {
       } else if(payloadMap.contains(keywords.relation.UNLINK)) {
         unlinkMutation(model, entityName, payloadMap(keywords.relation.UNLINK).asInstanceOf[List[Object]], session, executor)
       } else if(payloadMap.contains(keywords.relation.REPLACE)) {
-        replaceMutation(model, entityName, payloadMap(keywords.relation.REPLACE), session, executor)
+        replaceMutation(model, parentEntityName, parentId, parentRelation, entityName, payloadMap(keywords.relation.REPLACE), session, executor)
       } else {
         // default to replacing with single mutation
-        replaceMutation(model, entityName, payload, session, executor)
+        replaceMutation(model, parentEntityName, parentId, parentRelation, entityName, payload, session, executor)
       }
     } else {
       Future.failed(new RuntimeException(s"attempted to mutate entity of type '${entityName}' but payload has type '${payload.getClass}', must be either Map or List"))
     }
+  }
+
+
+  def writeUnbatched(result: MutationResult, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
+    result.flatMap(entities_statements => {
+      val (entities, statements) = entities_statements
+      val results = statements.map(cassandra.executeAsync(session, _, executor))
+      implicit val ec: ExecutionContext = executor
+      Future.sequence(results.map(_.toList(executor))).map(_ => entities)
+    })(executor)
+  }
+  def createUnbatched(model: OutputModel, entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
+    writeUnbatched(create(model, entityName, payload, session, executor), session, executor)
+  }
+  def updateUnbatched(model: OutputModel, entityName: String, payload: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
+    writeUnbatched(update(model, entityName, payload, session, executor), session, executor)
+  }
+  def deleteUnbatched(model: OutputModel, entityName: String, payload: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
+    writeUnbatched(delete(model, entityName, payload, session, executor), session, executor)
   }
 
 
