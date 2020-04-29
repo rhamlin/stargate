@@ -7,6 +7,8 @@ import java.util.concurrent._
 import appstax.model.OutputModel
 import appstax.queries.pagination.{StreamEntry, Streams}
 import appstax.service.http
+import appstax.metrics
+import appstax.metrics.RequestCollector
 import com.datastax.oss.driver.api.core.CqlSession
 import com.swrve.ratelimitedlogger.RateLimitedLog
 import com.typesafe.config.{Config, ConfigFactory}
@@ -19,9 +21,13 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.Try
+import io.prometheus.client.exporter.MetricsServlet
 
 
-class AppstaxServlet(val config: ParsedStarGateConfig) extends HttpServlet with LazyLogging {
+class AppstaxServlet(val config: ParsedStarGateConfig) 
+  extends HttpServlet 
+  with LazyLogging 
+  with RequestCollector{
 
   val apps = new ConcurrentHashMap[String, (CqlSession, OutputModel)]()
   val continuationCache = new ConcurrentHashMap[UUID, (StreamEntry,ScheduledFuture[Unit])]()
@@ -38,8 +44,6 @@ class AppstaxServlet(val config: ParsedStarGateConfig) extends HttpServlet with 
     .build()
 
   import AppstaxServlet._
-
-
 
   def newSession(keyspace: String): CqlSession = {
     val contacts = config.cassandraContactPoints.asScala.toList.map(c => (c.getString("host"), c.getInt("port")))
@@ -145,12 +149,16 @@ class AppstaxServlet(val config: ParsedStarGateConfig) extends HttpServlet with 
       logger.trace(s"http request: { path: '$path', method: '$op', content-length: $contentLength, content-type: '${req.getContentType}' }")
       path match {
         case s"/$appName/continue/${id}" =>
-          http.validateJsonContentHeader(req)
-          continueQuery(appName, UUID.fromString(id), resp)
+          timeRead(()=>{
+            http.validateJsonContentHeader(req)
+            continueQuery(appName, UUID.fromString(id), resp)
+          })
         case s"/${appName}/q/${query}" =>
-          http.validateJsonContentHeader(req)
-          val input = new String(req.getInputStream.readAllBytes)
-          runPredefinedQuery(appName, query, input, resp)
+          timeRead(()=>{
+            http.validateJsonContentHeader(req)
+            val input = new String(req.getInputStream.readAllBytes)
+            runPredefinedQuery(appName, query, input, resp)
+          })
         case s"/${appName}/${entity}" =>
           http.validateJsonContentHeader(req)
           http.validateMutation(op, contentLength, maxMutationSize)
@@ -158,11 +166,14 @@ class AppstaxServlet(val config: ParsedStarGateConfig) extends HttpServlet with 
           val payload = util.fromJson(input)
           runQuery(appName, entity, op, payload, resp)
         case s"/${appName}" =>
-          http.validateFileHeader(req)
-          http.validateSchemaSize(contentLength, maxSchemaSize)
-          val input = new String(req.getInputStream.readAllBytes)
-          postSchema(appName, input, resp)
+          timeSchemaCreate(()=>{
+            http.validateFileHeader(req)
+            http.validateSchemaSize(contentLength, maxSchemaSize)
+            val input = new String(req.getInputStream.readAllBytes)
+            postSchema(appName, input, resp)
+          })
         case _ =>
+          countError()
           resp.setStatus(HttpServletResponse.SC_NOT_FOUND)
           val msg = s"path: $path does not match /:appName/:entity/:id pattern"
           rateLimitedLog.warn(msg)
@@ -170,6 +181,7 @@ class AppstaxServlet(val config: ParsedStarGateConfig) extends HttpServlet with 
       }
     } catch {
       case e: Exception =>
+        countError()
         rateLimitedLog.error(s"exception: $e")
         resp.setStatus(HttpServletResponse.SC_BAD_GATEWAY)
         resp.getWriter.write(util.toJson(e.getMessage))
@@ -191,7 +203,7 @@ case class ParsedStarGateConfig(
                            @BeanProperty val cassandraDataCenter: String,
                            @BeanProperty val cassandraReplication: Int)
 object Main {
-
+  private val logger = Logger("main")
   private def mapConfig(config: Config):ParsedStarGateConfig = {
     ParsedStarGateConfig(
       config.getInt("http.port"),
@@ -206,17 +218,7 @@ object Main {
     )
   }
 
-  def main(args: Array[String]) = {
-    val logger = Logger("main")
-
-    val config = (if (args.length > 0) ConfigFactory.parseFile(new File(args(0))).resolve() else ConfigFactory.defaultApplication()).resolve()
-    val parsedConfig = mapConfig(config)
-    logger.info(s"parsedConfig: ${util.toPrettyJson(parsedConfig)}")
-    val server = new org.eclipse.jetty.server.Server(parsedConfig.httpPort)
-    val handler = new ServletHandler()
-    val servlet = new AppstaxServlet(parsedConfig)
-    handler.addServletWithMapping(new ServletHolder(servlet), "/")
-    server.setHandler(handler)
+  def logStartup() = {
     logger.info("Launch Mission To StarGate" )
     logger.info(" -----------")
     logger.info("|         * |")
@@ -247,6 +249,21 @@ object Main {
     logger.info("00000   00000")
     logger.info("============  ")
     logger.info(s"StarGate Version: 1.0.0")
+  }
+
+  def main(args: Array[String]) = {
+
+    val config = (if (args.length > 0) ConfigFactory.parseFile(new File(args(0))).resolve() else ConfigFactory.defaultApplication()).resolve()
+    val parsedConfig = mapConfig(config)
+    logger.info(s"parsedConfig: ${util.toPrettyJson(parsedConfig)}")
+    val server = new org.eclipse.jetty.server.Server(parsedConfig.httpPort)
+    metrics.registerAll(server) 
+    val handler = new ServletHandler()
+    val servlet = new AppstaxServlet(parsedConfig)
+    handler.addServletWithMapping(new ServletHolder(servlet), "/")
+    handler.addServletWithMapping(new ServletHolder(new MetricsServlet()), "/metrics");
+    server.setHandler(handler)
+    logStartup() 
     server.start
     server.join
   }
