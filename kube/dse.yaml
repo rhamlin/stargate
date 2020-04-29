@@ -4,7 +4,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: cassandra
-  namespace: stargate-staging
+  namespace: appstax-staging
 spec:
   clusterIP: None
   ports:
@@ -19,7 +19,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: cassandra
-  namespace: stargate-staging
+  namespace: appstax-staging
 spec:
   selector:
     matchLabels:
@@ -40,7 +40,7 @@ spec:
             - name: DS_LICENSE
               value: accept
             - name: SEEDS
-              value: "cassandra-0.cassandra.stargate-staging,cassandra-1.cassandra.stargate-staging,cassandra-2.cassandra.stargate-staging"  
+              value: "cassandra-0.cassandra.appstax-staging,cassandra-1.cassandra.appstax-staging,cassandra-2.cassandra.appstax-staging"  
           args: [ ]
           ports:
             - containerPort: 9042
