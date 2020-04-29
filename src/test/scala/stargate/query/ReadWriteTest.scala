@@ -26,7 +26,7 @@ class ReadWriteTest {
         val random = stargate.model.generator.createEntity(model.input, entity.name, 1)
         val (id, statements) = stargate.query.write.createEntity(tables, random)
         val payload = random.updated(ENTITY_ID_COLUMN_NAME, id)
-        val future = statements.map(cassandra.executeAsync(session, _, executor).toList(executor))
+        val future = statements.map(cassandra.executeAsync(session, _, executor))
         Await.result(Future.sequence(future), Duration.Inf)
         tables.foreach(table => {
           val conditions = stargate.query.write.tableConditionsForEntity(table, payload).map(_.get)
@@ -35,7 +35,7 @@ class ReadWriteTest {
           assert(rs.iterator.asScala.toList.length == 1)
         })
         val deleteStatements = stargate.query.write.deleteEntity(tables, payload)
-        val deleted = deleteStatements.map(cassandra.executeAsync(session, _, executor).toList(executor))
+        val deleted = deleteStatements.map(cassandra.executeAsync(session, _, executor))
         Await.result(Future.sequence(deleted), Duration.Inf)
         tables.foreach(table => {
           val conditions = stargate.query.write.tableConditionsForEntity(table, payload).map(_.get)
