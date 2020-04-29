@@ -252,17 +252,21 @@ object Main {
   }
 
   def main(args: Array[String]) = {
-
+    metrics.registerJVMMetrics()
     val config = (if (args.length > 0) ConfigFactory.parseFile(new File(args(0))).resolve() else ConfigFactory.defaultApplication()).resolve()
     val parsedConfig = mapConfig(config)
     logger.info(s"parsedConfig: ${util.toPrettyJson(parsedConfig)}")
     val server = new org.eclipse.jetty.server.Server(parsedConfig.httpPort)
-    metrics.registerAll(server) 
     val handler = new ServletHandler()
     val servlet = new AppstaxServlet(parsedConfig)
     handler.addServletWithMapping(new ServletHolder(servlet), "/")
+    //expose the MetricsServlet to the /metrics endpoint. To scrape metrics for Prometheus now you just need to point to the appropriate host and port combination
+    //ie http://localhost:8080/metrics
     handler.addServletWithMapping(new ServletHolder(new MetricsServlet()), "/metrics");
     server.setHandler(handler)
+    //has to be the last set handler, will wrap exisiting handler
+    //note this will mean that metrics calls will be counted as well in the total request count
+    metrics.registerServletHandlerStastics(server) 
     logStartup() 
     server.start
     server.join

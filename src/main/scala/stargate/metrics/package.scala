@@ -6,24 +6,26 @@ import io.prometheus.client.hotspot.DefaultExports
 import org.eclipse.jetty.server.Server
 
 package object metrics {
-
-  def registerAll(server: Server): Unit = {
-    registerServlet(server)
-    registerJVM()
-  }
-
-  def registerJVM(): Unit = {
+  /**
+  * sets default Hotspot metrics for the JVM
+  */
+  def registerJVMMetrics(): Unit = {
     DefaultExports.initialize();
   }
 
-  def registerServlet(server: Server): Unit = {
+  /**
+    * Has to be called after all the other handlers you want to be called, 
+    * it gets the previous handler and wraps it
+    * @param server Jetty Server
+    */
+  def registerServletHandlerStastics(server: Server): Unit = {
     // Configure StatisticsHandler.
     val stats = new StatisticsHandler()
+    //get current server handler and set it inside StatisticsHandler
     stats.setHandler(server.getHandler())
+    //set StatisticsHandler as the handler for servlet
     server.setHandler(stats)
     // Register collector.
-    val collector = new JettyStatisticsCollector(stats)
-    collector.register()
+    new JettyStatisticsCollector(stats).register()
   }
-
 }
