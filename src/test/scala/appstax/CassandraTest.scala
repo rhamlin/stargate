@@ -28,7 +28,7 @@ trait CassandraTest {
       logger.info("using already running cassandra instance for test")
       alreadyRunning = true
     } else if(localDocker.isSuccess) {
-      logger.info("using already running docker-cassandra instance for test")
+      logger.info("using already running docker-cassandra instance for test: {}", localDocker.get)
       contacts = List(("localhost", localDocker.get))
       alreadyRunning = true
     } else {

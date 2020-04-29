@@ -4,8 +4,12 @@ object keywords {
 
   val KEYWORD_PREFIX = "-"
 
-  object mutation {
+  object query {
     val GET: String = KEYWORD_PREFIX + config.query.op.GET
+    val INCLUDE: String = KEYWORD_PREFIX + "include"
+  }
+
+  object mutation {
     val CREATE: String = KEYWORD_PREFIX + config.query.op.CREATE
     val UPDATE: String = KEYWORD_PREFIX + config.query.op.UPDATE
     val MATCH: String = KEYWORD_PREFIX + config.query.op.MATCH
@@ -38,8 +42,6 @@ object keywords {
     }
 
     object query {
-
-      val INCLUDE: String = KEYWORD_PREFIX + "include"
 
       object op {
         val GET: String = "get"
