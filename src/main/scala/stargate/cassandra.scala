@@ -3,13 +3,13 @@ package stargate
 import java.net.InetSocketAddress
 import java.util.concurrent.CompletionStage
 
-import stargate.util.AsyncList
-import com.datastax.oss.driver.api.core.{CqlSession, CqlSessionBuilder}
 import com.datastax.oss.driver.api.core.`type`.DataType
 import com.datastax.oss.driver.api.core.cql.{AsyncResultSet, Row, Statement}
+import com.datastax.oss.driver.api.core.{CqlSession, CqlSessionBuilder}
+import com.datastax.oss.driver.api.querybuilder.SchemaBuilder
 import com.datastax.oss.driver.api.querybuilder.schema.CreateTable
-import com.datastax.oss.driver.api.querybuilder.{BuildableQuery, SchemaBuilder}
 import com.datastax.oss.driver.internal.core.util.Strings
+import stargate.util.AsyncList
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
@@ -17,8 +17,6 @@ import scala.jdk.FutureConverters._
 
 
 object cassandra {
-
-  type CassandraFunction[I,O] = (CqlSession, I, ExecutionContext) => O
 
   case class CassandraKeyNames(partitionKeys: List[String], clusteringKeys: List[String]) {
     def combined: List[String] = (partitionKeys ++ clusteringKeys)
@@ -66,23 +64,12 @@ object cassandra {
     row.getColumnDefinitions.iterator.asScala.map(col => (col.getName.toString, row.getObject(col.getName))).toMap
   }
 
-  def executeAsync(cqlSession: CqlSession, statement: Statement[_], executor: ExecutionContext): PagedResults[Row] = {
+  def queryAsync(cqlSession: CqlSession, statement: Statement[_], executor: ExecutionContext): PagedResults[Row] = {
     convertAsyncResultSet(cqlSession.executeAsync(statement), executor)
   }
 
-  def executeAsync(statement: BuildableQuery): CassandraFunction[Map[String,Object], PagedResults[Row]] = {
-    (session: CqlSession, args: Map[String,Object], executor: ExecutionContext) => {
-      val fixedArgs = args.map((k_v: (String,Object)) => {
-        val quoted = Strings.doubleQuote(k_v._1)
-        val value = k_v._2 match {
-          case x:List[_] => x.asJava
-          case x => x
-        }
-        (quoted, value)
-      })
-      val bound = statement.build(fixedArgs.asJava)
-      executeAsync(session, bound, executor)
-    }
+  def executeAsync(cqlSession: CqlSession, statement: Statement[_], executor: ExecutionContext): Future[Unit] = {
+    queryAsync(cqlSession, statement, executor).toList(executor).map(_ => ())(executor)
   }
 
   def create(session: CqlSession, table: CassandraTable): Future[AsyncResultSet] = {

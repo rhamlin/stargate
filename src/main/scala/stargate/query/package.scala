@@ -2,7 +2,7 @@ package stargate
 
 import java.util.UUID
 
-import stargate.cassandra.{CassandraFunction, _}
+import stargate.cassandra
 import stargate.model._
 import stargate.util.AsyncList
 import com.datastax.oss.driver.api.core.CqlSession
@@ -20,8 +20,6 @@ package object query {
 
   val logger = Logger("queries")
 
-  type CassandraPagedFunction[I,O] = CassandraFunction[I, PagedResults[O]]
-  type CassandraGetFunction[T] = CassandraPagedFunction[Map[String, Object], T]
   type MutationResult = Future[(List[Map[String,Object]], List[SimpleStatement])]
   type RelationMutationResult = Future[(Map[String,List[Map[String,Object]]], List[SimpleStatement])]
 
@@ -40,7 +38,7 @@ package object query {
       logger.warn(s"failed to find index for entity '${entityName}' with conditions ${conditions}, best match was: ${bestTable}")
       selection = selection.allowFiltering
     }
-    cassandra.executeAsync(session, selection.build, executor).map(_.getUuid(Strings.doubleQuote(schema.ENTITY_ID_COLUMN_NAME)), executor)
+    cassandra.queryAsync(session, selection.build, executor).map(_.getUuid(Strings.doubleQuote(schema.ENTITY_ID_COLUMN_NAME)), executor)
   }
 
   // starting with an entity type and a set of ids for that type, walk the relation-path to find related entity ids of the final type in the path
@@ -324,7 +322,7 @@ package object query {
       val (entities, statements) = entities_statements
       val results = statements.map(cassandra.executeAsync(session, _, executor))
       implicit val ec: ExecutionContext = executor
-      Future.sequence(results.map(_.toList(executor))).map(_ => entities)
+      Future.sequence(results).map(_ => entities)
     })(executor)
   }
   def createUnbatched(model: OutputModel, entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
@@ -341,7 +339,7 @@ package object query {
       val (entities, statements) = entities_statements
       val builder = new BatchStatementBuilder(BatchType.LOGGED)
       val batch = statements.foldLeft(builder)((batch, statement) => batch.addStatement(statement)).build
-      val results = cassandra.executeAsync(session, batch, executor).toList(executor)
+      val results = cassandra.executeAsync(session, batch, executor)
       results.map(_ => entities)(executor)
     })(executor)
   }
