@@ -50,9 +50,8 @@ package object queries {
     } else {
       val targetEntityName = model.input.entities(entityName).relations(relationPath.head).targetEntityName
       val relationTable = model.relationTables((entityName, relationPath.head))
-      val select = read.relatedSelect(relationTable.name)
       // TODO: possibly use some batching instead of passing one id at a time?
-      val nextIds = ids.flatMap(id => select(session, List(id), executor), executor)
+      val nextIds = ids.flatMap(id => read.relatedSelect(relationTable.name, List(id), session, executor), executor)
       resolveRelations(model, targetEntityName, relationPath.tail, nextIds, session, executor)
     }
   }
@@ -104,8 +103,9 @@ package object queries {
   def getEntitiesAndRelated(model: OutputModel, entityName: String, ids: AsyncList[UUID], payload: Map[String, Object], session: CqlSession, executor: ExecutionContext): AsyncList[Map[String,Object]] = {
     val relations = model.input.entities(entityName).relations
     val traverseRelations = relations.view.filterKeys(payload.contains).toMap
+    val includeFields = payload.get(appstax.keywords.query.INCLUDE).map(_.asInstanceOf[List[String]])
     val results = ids.map(id => {
-      val futureMaybeEntity = read.entityIdToObject(model, entityName, id, session, executor)
+      val futureMaybeEntity = read.entityIdToObject(model, entityName, includeFields, id, session, executor)
       futureMaybeEntity.map(_.map(entity => {
         val related = traverseRelations.map((name_relation: (String, RelationField)) => {
           val (relationName, relation) = name_relation

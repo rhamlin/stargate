@@ -31,6 +31,8 @@ package object queries {
     matchPayload ++ selectionPayload
   }
   def transform(selection: GetSelection): Map[String,Object] = {
-    selection.relations.map((name_selection:(String, GetSelection)) => (name_selection._1, transform(name_selection._2)))
+    val fields = Map((keywords.query.INCLUDE, selection.include))
+    val relations = selection.relations.map((name_selection:(String, GetSelection)) => (name_selection._1, transform(name_selection._2)))
+    fields ++ relations
   }
 }

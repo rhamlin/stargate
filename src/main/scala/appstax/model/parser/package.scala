@@ -92,7 +92,7 @@ package object parser {
   }
 
   def parseGetSelection(config: Config): GetSelection = {
-    val include = config.getStringList(keywords.config.query.INCLUDE).asScala.toList
+    val include = config.getStringList(keywords.query.INCLUDE).asScala.toList
     val relationsConf = getRelationsConf(config)
     val relations = relationsConf.root.keySet.asScala.map(name => (name, parseGetSelection(relationsConf.getConfig(name)))).toMap
     GetSelection(include, relations)
