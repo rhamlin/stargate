@@ -85,7 +85,7 @@ package object query {
       val (path, conditions) = path_conds
       val targetEntity = model.input.entities(schema.traverseEntityPath(model.input, entityName, path))
       // try to convert passed in comparison arguments to appropriate type for column - e.g. uuids may be passed in as strings from JSON, but then converted to java.util.UUID here
-      val termConditions = conditions.map(cond => ScalarCondition[Term](cond.field, cond.comparison, QueryBuilder.literal(targetEntity.fields(cond.field).scalarType.convert(cond.argument))))
+      val termConditions = conditions.map(cond => cond.replaceArgument[Term](QueryBuilder.literal(targetEntity.fields(cond.field).scalarType.convert(cond.argument))))
       (path, matchEntities(model, entityName, path, termConditions, session, executor))
     }).toMap
     val rootIds = groupedEntities.toList.map(path_ids => resolveReverseRelations(model, entityName, path_ids._1, path_ids._2, session, executor))
