@@ -79,10 +79,9 @@ package object query {
   // for a root-entity and relation path, apply selection conditions to get related entity ids, then walk relation tables in reverse to get ids of the root entity type
   def matchEntities(model: OutputModel, entityName: String, conditionsPayload: List[Object], session: CqlSession, executor: ExecutionContext): AsyncList[UUID] = {
     val conditions = parseConditions(conditionsPayload)
-    val groupedConditions = schema.groupConditionsByPath(conditions, (x:ScalarCondition[Object]) => x.field)
-    val nonEmptyGroupedConditions = if(groupedConditions.isEmpty) Map((List(), List())) else groupedConditions
-    val trimmedGroupedConditions = nonEmptyGroupedConditions.view.mapValues(_.map(_.trimRelationPath)).toMap
-    val groupedEntities = trimmedGroupedConditions.toList.map(path_conds => {
+    val groupedConditions = schema.groupConditionsByPath[Object](conditions)
+    val nonEmptyGroupedConditions = if(groupedConditions.isEmpty) Map((List.empty[String], List.empty[ScalarCondition[Object]])) else groupedConditions
+    val groupedEntities = nonEmptyGroupedConditions.toList.map(path_conds => {
       val (path, conditions) = path_conds
       val targetEntity = model.input.entities(schema.traverseEntityPath(model.input, entityName, path))
       // try to convert passed in comparison arguments to appropriate type for column - e.g. uuids may be passed in as strings from JSON, but then converted to java.util.UUID here
