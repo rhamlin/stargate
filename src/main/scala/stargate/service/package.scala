@@ -111,7 +111,7 @@ class AppstaxServlet(val config: ParsedStarGateConfig)
 
     val result: Future[Object] = op match {
       case "GET" => {
-        val result = query.getAndTruncate(model, entity, payloadMap.get, defaultLimit, defaultTTL, session, executor)
+        val result = query.untyped.getAndTruncate(model, entity, payloadMap.get, defaultLimit, defaultTTL, session, executor)
         cacheStreams(result)
       }
       case "POST" => model.mutation.create(entity, payload, session, executor)

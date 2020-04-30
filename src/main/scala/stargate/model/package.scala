@@ -87,24 +87,24 @@ package object model {
     }
 
     def get(entityName: String, payload: Map[String, Object], session: CqlSession, executor: ExecutionContext): AsyncList[Map[String, Object]] =
-      stargate.query.get(this, entityName, payload, session, executor)
+      stargate.query.untyped.get(this, entityName, payload, session, executor)
 
     val model: OutputModel = this
     val mutation: MutationOps = new MutationOps {
       override def create(entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]] =
-        stargate.query.createUnbatched(model, entityName, payload, session, executor)
+        stargate.query.untyped.createUnbatched(model, entityName, payload, session, executor)
       override def update(entityName: String, payload: Map[String, Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]] =
-        stargate.query.updateUnbatched(model, entityName, payload, session, executor)
+        stargate.query.untyped.updateUnbatched(model, entityName, payload, session, executor)
       override def delete(entityName: String, payload: Map[String, Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]] =
-        stargate.query.deleteUnbatched(model, entityName, payload, session, executor)
+        stargate.query.untyped.deleteUnbatched(model, entityName, payload, session, executor)
     }
     val batchMutation: MutationOps = new MutationOps {
       override def create(entityName: String, payload: Object, session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]] =
-        stargate.query.createBatched(model, entityName, payload, session, executor)
+        stargate.query.untyped.createBatched(model, entityName, payload, session, executor)
       override def update(entityName: String, payload: Map[String, Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]] =
-        stargate.query.updateBatched(model, entityName, payload, session, executor)
+        stargate.query.untyped.updateBatched(model, entityName, payload, session, executor)
       override def delete(entityName: String, payload: Map[String, Object], session: CqlSession, executor: ExecutionContext): Future[List[Map[String, Object]]] =
-        stargate.query.deleteBatched(model, entityName, payload, session, executor)
+        stargate.query.untyped.deleteBatched(model, entityName, payload, session, executor)
     }
   }
   trait MutationOps {
