@@ -69,11 +69,11 @@ object validation {
   }
 
   def validateUpdate(model: InputModel, entityName: String, payload: Map[String, Object]): Map[String, Object] = {
-    val conditions = validateConditions(model, entityName, payload(keywords.mutation.MATCH))
+    val conditions = mapWrap(keywords.mutation.MATCH, validateConditions(model, entityName, payload(keywords.mutation.MATCH)))
     def validateRelation(targetEntityName: String, targetPayload: Object): Map[String,Object] = {
       validateLinkMutation(model, targetEntityName, targetPayload.asInstanceOf[Map[String,Object]])
     }
-    validateEntity(Set(keywords.mutation.MATCH), validateRelation, model, entityName, payload)
+    conditions ++ validateEntity(Set(keywords.mutation.MATCH), validateRelation, model, entityName, payload)
   }
 
   def validateMutation(model: InputModel, entityName: String, payload: Object): Map[String,Object] = {
