@@ -224,14 +224,14 @@ object EntityCRUDTest extends CassandraTest {
   }
   def getEntities(model: OutputModel, entityName: String, entityId: UUID, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
     val request = getRequestByEntityId(model.input, entityName, entityId)
-    query.getAndTruncate(model, entityName, request, 1000, session, executor)
+    query.untyped.getAndTruncate(model, entityName, request, 1000, session, executor)
   }
   def getEntity(model: OutputModel, entityName: String, entityId: UUID, session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
     getEntities(model, entityName, entityId, session, executor).map(list => {assert(list.length == 1); list(0)})(executor)
   }
   def getAllEntities(model: OutputModel, entityName: String, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
     val request = getRequestRelations(model.input, entityName, Set(entityName)).updated(stargate.keywords.mutation.MATCH, List.empty)
-    query.getAndTruncate(model, entityName, request, 1000, session, executor)
+    query.untyped.getAndTruncate(model, entityName, request, 1000, session, executor)
   }
 
 
