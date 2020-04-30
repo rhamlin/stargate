@@ -1,30 +1,27 @@
 package stargate.model
 
-import stargate.keywords
+import stargate.{keywords, schema}
 
 object queries {
 
-  sealed trait Query
-  case class GetSelection(include: List[String], relations: Map[String, GetSelection])
+  case class GetQuery(entityName: String, `match`: schema.GroupedConditions[Object], selection: GetSelection)
+  case class GetSelection(relations: Map[String, GetSelection], include: Option[List[String]], limit: Option[Int], continue: Boolean, ttl: Option[Int])
 
-  // pre-defined mutations currently not being used, but will probably update and use in near future
-  case class CreateQuery(queryName: String, entityName: String, create: CreateMutation) extends Query
-  case class UpdateQuery(queryName: String, entityName: String, update: UpdateMutation) extends Query
-  case class DeleteQuery(queryName: String, entityName: String, `match`: Where, selection: DeleteSelection) extends Query
+  case class DeleteQuery(entityName: String, `match`: schema.GroupedConditions[Object], selection: DeleteSelection)
   case class DeleteSelection(relations: Map[String, DeleteSelection])
 
   sealed trait Mutation
-  case class CreateMutation(include: List[String], relations: Map[String, Mutation]) extends Mutation
-  case class UpdateMutation(`match`: Where, include: List[String], relations: Map[String, RelationMutation]) extends Mutation
+  case class CreateMutation(entityName: String, relations: Map[String, Mutation]) extends Mutation
+  case class UpdateMutation(entityName: String, `match`: schema.GroupedConditions[Object], relations: Map[String, RelationMutation]) extends Mutation
   sealed trait RelationMutation
   case class LinkMutation(mutation: Mutation) extends RelationMutation
-  case class UnlinkMutation(`match`: Where) extends RelationMutation
+  case class UnlinkMutation(`match`: schema.GroupedConditions[Object]) extends RelationMutation
   case class ReplaceMutation(mutation: Mutation) extends RelationMutation
 
 
 
   object predefined {
-    case class GetQuery(queryName: String, entityName: String, `match`: Where, selection: GetSelection) extends Query
+    case class GetQuery(queryName: String, entityName: String, `match`: Where, selection: GetSelection)
 
 
     def transform(query: GetQuery, payload: Map[String,Object]): Map[String,Object] = {

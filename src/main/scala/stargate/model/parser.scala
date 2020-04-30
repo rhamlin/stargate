@@ -94,6 +94,6 @@ object parser {
     val include = config.getStringList(keywords.query.INCLUDE).asScala.toList
     val relationsConf = getRelationsConf(config)
     val relations = relationsConf.root.keySet.asScala.map(name => (name, parseGetSelection(relationsConf.getConfig(name)))).toMap
-    GetSelection(include, relations)
+    GetSelection(relations, Some(include), None, false, None)
   }
 }
