@@ -66,7 +66,7 @@ class AppstaxServlet(val config: ParsedStarGateConfig)
     val (session, model) = apps.get(appName)
     val payloadMap = util.fromJson(input).asInstanceOf[Map[String,Object]]
     val query = model.input.queries(queryName)
-    val runtimePayload = stargate.model.queries.transform(query, payloadMap)
+    val runtimePayload = stargate.model.queries.predefined.transform(query, payloadMap)
     runQuery(appName, query.entityName, "GET", runtimePayload, resp)
   }
 

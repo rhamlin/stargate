@@ -1,7 +1,8 @@
 package stargate.model
 
 import stargate.keywords
-import stargate.model.queries.{GetQuery, GetSelection}
+import stargate.model.queries.GetSelection
+import stargate.model.queries.predefined.GetQuery
 import com.typesafe.config.{Config, ConfigFactory, ConfigList}
 
 import scala.collection.mutable
@@ -57,7 +58,7 @@ object parser {
 
 
 
-  def parseQueries(config: Config): Map[String, stargate.model.queries.GetQuery] = {
+  def parseQueries(config: Config): Map[String, GetQuery] = {
     config.root.keySet.asScala.flatMap(entityName => {
       val entityConfig = config.getConfig(entityName)
       entityConfig.root.keySet.asScala.map(queryName => {

@@ -5,6 +5,7 @@ import stargate.service.validations
 import stargate.util.AsyncList
 import com.datastax.oss.driver.api.core.CqlSession
 import com.datastax.oss.driver.api.core.`type`.{DataType, DataTypes}
+import stargate.model.queries.predefined.GetQuery
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -65,7 +66,7 @@ package object model {
 
   case class InputModel(
     entities: Map[String, Entity],
-    queries: Map[String, model.queries.GetQuery],
+    queries: Map[String, GetQuery],
     conditions: Map[String, List[NamedConditions]]
   ) {
     // TODO - either remove this, or add support for specifying in config+parser, create default unknown value
