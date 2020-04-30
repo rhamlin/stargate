@@ -2,6 +2,7 @@ package stargate.query
 
 import stargate.model.{InputModel, ScalarComparison, ScalarCondition}
 import stargate.keywords
+import stargate.model.queries.{CreateMutation, CreateOneMutation, DeleteQuery, DeleteSelection, GetQuery, GetSelection, LinkMutation, MatchMutation, Mutation, RelationMutation, ReplaceMutation, UnlinkMutation, UpdateMutation}
 import stargate.schema
 import stargate.schema.{ENTITY_ID_COLUMN_NAME, GroupedConditions}
 
@@ -17,23 +18,26 @@ object validation {
   }
 
   // no return, since no transformation is performed
-  def validateGetSelection(model: InputModel, entityName: String, payload: Map[String,Object]): Unit = {
+  def validateGetSelection(model: InputModel, entityName: String, payload: Map[String,Object]): GetSelection = {
     val entity = model.entities(entityName)
     val allowedKeywords = Set(keywords.query.INCLUDE, keywords.pagination.LIMIT, keywords.pagination.CONTINUE, keywords.pagination.TTL)
     val unusedKeys = payload.keySet.diff(entity.relations.keySet ++ allowedKeywords)
     checkUnusedFields(unusedKeys, allowedKeywords, entity.relations.keySet)
-    payload.get(keywords.query.INCLUDE).foreach(_.asInstanceOf[List[String]].foreach(field => assert(entity.fields.contains(field))))
-    entity.relations.values.filter(r => payload.contains(r.name)).foreach(r => validateGetSelection(model, r.targetEntityName, payload(r.name).asInstanceOf[Map[String,Object]]))
+    val include = payload.get(keywords.query.INCLUDE).map(_.asInstanceOf[List[String]])
+    include.foreach(_.foreach(field => assert(entity.fields.contains(field))))
+    val relations = entity.relations.values.filter(r => payload.contains(r.name)).map(r => (r.name, validateGetSelection(model, r.targetEntityName, payload(r.name).asInstanceOf[Map[String,Object]])))
+    val limit: Option[Int] = payload.get(keywords.pagination.LIMIT).map(_.asInstanceOf[Integer])
+    val continue: Boolean = payload.get(keywords.pagination.CONTINUE).map(_.asInstanceOf[java.lang.Boolean]).getOrElse(java.lang.Boolean.FALSE)
+    val ttl: Option[Int] = payload.get(keywords.pagination.TTL).map(_.asInstanceOf[Integer])
+    GetSelection(relations.toMap, include, limit, continue, ttl)
   }
-  def validateGet(model: InputModel, entityName: String, payload: Map[String,Object]): Map[String,Object] = {
-    val conditions = mapWrap(keywords.mutation.MATCH, validateConditions(model, entityName, payload(keywords.mutation.MATCH)))
-    val selection = payload.removed(keywords.mutation.MATCH)
-    validateGetSelection(model, entityName, selection)
-    conditions ++ selection
+  def validateGet(model: InputModel, entityName: String, payload: Map[String,Object]): GetQuery = {
+    val conditions = validateConditions(model, entityName, payload(keywords.mutation.MATCH))
+    val selection = validateGetSelection(model, entityName, payload.removed(keywords.mutation.MATCH))
+    GetQuery(conditions, selection)
   }
 
-  def validateEntity(allowedKeywords: Set[String], validateRelation: (String, Object) => Map[String,Object],
-                         model: InputModel, entityName: String, payload: Map[String, Object]): Map[String, Object] = {
+  def validateEntity(model: InputModel, entityName: String, payload: Map[String, Object], allowedKeywords: Set[String]): (Map[String,Object], Map[String, RelationMutation]) = {
     assert(!payload.contains(ENTITY_ID_COLUMN_NAME), s"mutation may not specify field: ${ENTITY_ID_COLUMN_NAME}")
     val entity = model.entities(entityName)
     val allowedFields = entity.fields.keySet ++ entity.relations.keySet
@@ -43,26 +47,30 @@ object validation {
       (field.name, field.scalarType.convert(payload(field.name)))
     })
     val updatedRelations = entity.relations.values.filter(r => payload.contains(r.name)).map(relation => {
-      (relation.name, validateRelation(relation.targetEntityName, payload(relation.name)))
+      (relation.name, validateLinkMutation(model, relation.targetEntityName, payload(relation.name).asInstanceOf[Map[String,Object]]))
     })
-    (updatedScalars ++ updatedRelations).toMap
+    (updatedScalars.toMap, updatedRelations.toMap)
   }
 
-  def validateCreateOne(model: InputModel, entityName: String, payload: Map[String, Object]): Map[String, Object] = {
-    def validateRelation(targetEntityName: String, targetPayload: Object): Map[String,Object] = {
-      mapWrap(keywords.relation.LINK, validateMutation(model, targetEntityName, targetPayload))
-    }
-    validateEntity(Set.empty, validateRelation, model, entityName, payload)
+  def validateCreateOne(model: InputModel, entityName: String, payload: Map[String, Object]): CreateOneMutation = {
+    val entity = model.entities(entityName)
+    val wrappedRelationsPayload: Map[String,Object] = payload.map(kv => {
+      val wrapped = if(entity.relations.contains(kv._1)) { Map((keywords.relation.LINK, kv._2)) } else { kv._2 }
+      (kv._1, wrapped)
+    })
+    val (fields, relations) = validateEntity(model, entityName, payload, Set.empty)
+    CreateOneMutation(fields, relations.view.mapValues(v => v.asInstanceOf[LinkMutation].mutation).toMap)
   }
 
-  def validateCreate(model: InputModel, entityName: String, payload: Object): List[Map[String,Object]] = {
-    if (payload.isInstanceOf[List[Map[String, Object]]]) {
+  def validateCreate(model: InputModel, entityName: String, payload: Object): CreateMutation = {
+    val createOnes = if (payload.isInstanceOf[List[Map[String, Object]]]) {
       payload.asInstanceOf[List[Map[String, Object]]].map(validateCreateOne(model, entityName, _))
     } else if (payload.isInstanceOf[Map[String, Object]]) {
       List(validateCreateOne(model, entityName, payload.asInstanceOf[Map[String, Object]]))
     } else {
       throw new RuntimeException(s"create request must be either a Map or List[Map], instead got ${payload.getClass}")
     }
+    CreateMutation(createOnes)
   }
 
   def validateConditions(model: InputModel, entityName: String, payload: Object): GroupedConditions[Object] = {
@@ -90,29 +98,27 @@ object validation {
     }
   }
 
-  def validateUpdate(model: InputModel, entityName: String, payload: Map[String, Object]): Map[String, Object] = {
-    val conditions = mapWrap(keywords.mutation.MATCH, validateConditions(model, entityName, payload(keywords.mutation.MATCH)))
-    def validateRelation(targetEntityName: String, targetPayload: Object): Map[String,Object] = {
-      validateLinkMutation(model, targetEntityName, targetPayload.asInstanceOf[Map[String,Object]])
-    }
-    conditions ++ validateEntity(Set(keywords.mutation.MATCH), validateRelation, model, entityName, payload)
+  def validateUpdate(model: InputModel, entityName: String, payload: Map[String, Object]): UpdateMutation = {
+    val conditions = validateConditions(model, entityName, payload(keywords.mutation.MATCH))
+    val (fields, relations) = validateEntity(model, entityName, payload.removed(keywords.mutation.MATCH), Set.empty)
+    UpdateMutation(conditions, fields, relations)
   }
 
-  def validateMutation(model: InputModel, entityName: String, payload: Object): Map[String,Object] = {
+  def validateMutation(model: InputModel, entityName: String, payload: Object): Mutation = {
     if (payload.isInstanceOf[List[Object]]) {
       // assume create if payload is list
-      mapWrap(keywords.mutation.CREATE, validateCreate(model, entityName, payload))
+      validateCreate(model, entityName, payload)
     } else if (payload.isInstanceOf[Map[String, Object]]) {
       val payloadMap = payload.asInstanceOf[Map[String, Object]]
       if (payloadMap.keySet == Set(keywords.mutation.CREATE)) {
-        mapWrap(keywords.mutation.CREATE, validateCreate(model, entityName, payloadMap(keywords.mutation.CREATE)))
+        validateCreate(model, entityName, payloadMap(keywords.mutation.CREATE))
       } else if (payloadMap.keySet == Set(keywords.mutation.MATCH)) {
-        mapWrap(keywords.mutation.MATCH, validateConditions(model, entityName, payloadMap(keywords.mutation.MATCH)))
+        MatchMutation(validateConditions(model, entityName, payloadMap(keywords.mutation.MATCH)))
       } else if (payloadMap.keySet == Set(keywords.mutation.UPDATE)) {
-        mapWrap(keywords.mutation.UPDATE, validateUpdate(model, entityName, payloadMap(keywords.mutation.UPDATE).asInstanceOf[Map[String,Object]]))
+        validateUpdate(model, entityName, payloadMap(keywords.mutation.UPDATE).asInstanceOf[Map[String,Object]])
       } else {
         // default to create
-        mapWrap(keywords.mutation.CREATE, validateCreate(model, entityName, payload))
+        validateCreate(model, entityName, payload)
       }
     } else {
       throw new RuntimeException(
@@ -120,21 +126,21 @@ object validation {
     }
   }
 
-  def validateLinkMutation(model: InputModel, entityName: String, payload: Map[String,Object]): Map[String,Object] = {
+  def validateLinkMutation(model: InputModel, entityName: String, payload: Map[String,Object]): RelationMutation = {
     if (payload.isInstanceOf[List[Object]]) {
       // if list, assume replace-create
-      mapWrap(keywords.relation.REPLACE, validateMutation(model, entityName, payload))
+      ReplaceMutation(validateMutation(model, entityName, payload))
     } else if (payload.isInstanceOf[Map[String, Object]]) {
       val payloadMap = payload.asInstanceOf[Map[String, Object]]
       if(payload.keySet == Set(keywords.relation.LINK)) {
-        mapWrap(keywords.relation.LINK, validateMutation(model, entityName, payloadMap(keywords.relation.LINK)))
+        LinkMutation(validateMutation(model, entityName, payloadMap(keywords.relation.LINK)))
       } else if(payload.keySet == Set(keywords.relation.UNLINK)) {
-        mapWrap(keywords.relation.UNLINK, validateConditions(model, entityName, payloadMap(keywords.relation.UNLINK)))
+        UnlinkMutation(validateConditions(model, entityName, payloadMap(keywords.relation.UNLINK)))
       } else if(payload.keySet == Set(keywords.relation.REPLACE)) {
-        mapWrap(keywords.relation.REPLACE, validateMutation(model, entityName, payloadMap(keywords.relation.REPLACE)))
+        ReplaceMutation(validateMutation(model, entityName, payloadMap(keywords.relation.REPLACE)))
       } else {
         // assume replace if not specified
-        mapWrap(keywords.relation.REPLACE, validateMutation(model, entityName, payloadMap))
+        ReplaceMutation(validateMutation(model, entityName, payloadMap))
       }
     } else {
       throw new RuntimeException(
@@ -142,17 +148,19 @@ object validation {
     }
   }
 
-  def validateDeleteSelection(model: InputModel, entityName: String, payload: Map[String,Object]): Unit = {
+  def validateDeleteSelection(model: InputModel, entityName: String, payload: Map[String,Object]): DeleteSelection = {
     val entity = model.entities(entityName)
     val unusedKeys = payload.keySet.diff(entity.relations.keySet)
     checkUnusedFields(unusedKeys, Set.empty, entity.relations.keySet)
-    entity.relations.values.filter(r => payload.contains(r.name)).foreach(r => validateDeleteSelection(model, r.targetEntityName, payload(r.name).asInstanceOf[Map[String,Object]]))
+    val relations = entity.relations.values.filter(r => payload.contains(r.name)).map(r => {
+      (r.name, validateDeleteSelection(model, r.targetEntityName, payload(r.name).asInstanceOf[Map[String,Object]]))
+    })
+    DeleteSelection(relations.toMap)
   }
-  def validateDelete(model: InputModel, entityName: String, payload: Map[String,Object]): Map[String,Object] = {
-    val conditions = mapWrap(keywords.mutation.MATCH, validateConditions(model, entityName, payload(keywords.mutation.MATCH)))
-    val selection = payload.removed(keywords.mutation.MATCH)
-    validateDeleteSelection(model, entityName, selection)
-    conditions ++ selection
+  def validateDelete(model: InputModel, entityName: String, payload: Map[String,Object]): DeleteQuery = {
+    val conditions = validateConditions(model, entityName, payload(keywords.mutation.MATCH))
+    val selection = validateDeleteSelection(model, entityName, payload.removed(keywords.mutation.MATCH))
+    DeleteQuery(conditions, selection)
   }
 
 }

@@ -18,7 +18,7 @@ object queries {
   case class UpdateMutation(`match`: GroupedConditions[Object], fields: Map[String,Object], relations: Map[String, RelationMutation]) extends Mutation
   sealed trait RelationMutation
   case class LinkMutation(mutation: Mutation) extends RelationMutation
-  case class UnlinkMutation(`match`: MatchMutation) extends RelationMutation
+  case class UnlinkMutation(`match`: GroupedConditions[Object]) extends RelationMutation
   case class ReplaceMutation(mutation: Mutation) extends RelationMutation
 
 

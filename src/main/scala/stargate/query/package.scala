@@ -2,21 +2,18 @@ package stargate
 
 import java.util.UUID
 
-import stargate.cassandra
-import stargate.model._
-import stargate.util.AsyncList
 import com.datastax.oss.driver.api.core.CqlSession
-import com.datastax.oss.driver.api.core.cql.{BatchStatementBuilder, BatchType, BatchableStatement, SimpleStatement}
+import com.datastax.oss.driver.api.core.cql.{BatchStatementBuilder, BatchType, SimpleStatement}
 import com.datastax.oss.driver.api.querybuilder.QueryBuilder
 import com.datastax.oss.driver.api.querybuilder.term.Term
 import com.datastax.oss.driver.internal.core.util.Strings
 import com.typesafe.scalalogging.Logger
-import stargate.model.queries.{CreateMutation, CreateOneMutation, DeleteQuery, DeleteSelection, GetQuery, GetSelection, LinkMutation, MatchMutation, Mutation, RelationMutation, ReplaceMutation, UnlinkMutation, UpdateMutation}
+import stargate.model._
+import stargate.model.queries._
 import stargate.schema.GroupedConditions
+import stargate.util.AsyncList
 
-import scala.jdk.CollectionConverters._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Try
 
 package object query {
 
@@ -254,7 +251,7 @@ package object query {
   def relationMutation(model: OutputModel, parentEntityName: String, parentId: UUID, parentRelation: String, entityName: String, payload: RelationMutation, session: CqlSession, executor: ExecutionContext): RelationMutationResult = {
     payload match {
       case link: LinkMutation => linkMutation(model, entityName, link.mutation, session, executor)
-      case unlink: UnlinkMutation => unlinkMutation(model, entityName, unlink.`match`, session, executor)
+      case unlink: UnlinkMutation => unlinkMutation(model, entityName, MatchMutation(unlink.`match`), session, executor)
       case replace: ReplaceMutation => replaceMutation(model, parentEntityName, parentId, parentRelation, entityName, replace.mutation, session, executor)
     }
   }
