@@ -27,7 +27,7 @@ object validation {
     include.foreach(_.foreach(field => assert(entity.fields.contains(field))))
     val relations = entity.relations.values.filter(r => payload.contains(r.name)).map(r => (r.name, validateGetSelection(model, r.targetEntityName, payload(r.name).asInstanceOf[Map[String,Object]])))
     val limit: Option[Int] = payload.get(keywords.pagination.LIMIT).map(_.asInstanceOf[Integer])
-    val continue: Boolean = payload.get(keywords.pagination.CONTINUE).map(_.asInstanceOf[java.lang.Boolean]).getOrElse(java.lang.Boolean.FALSE)
+    val continue: java.lang.Boolean = payload.get(keywords.pagination.CONTINUE).map(_.asInstanceOf[java.lang.Boolean]).getOrElse(java.lang.Boolean.FALSE)
     val ttl: Option[Int] = payload.get(keywords.pagination.TTL).map(_.asInstanceOf[Integer])
     GetSelection(relations.toMap, include, limit, continue, ttl)
   }
