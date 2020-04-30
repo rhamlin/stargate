@@ -9,14 +9,36 @@ object validation {
 
   def mapWrap[T](key: String, value: T) = Map((key, value))
 
+
+  def checkUnusedFields(unusedKeys: Set[String], allowedKeywords: Set[String], allowedFields: Set[String]) = {
+    val (unusedKeywords, unusedFields) = unusedKeys.partition(_.startsWith(keywords.KEYWORD_PREFIX))
+    assert(unusedKeywords.isEmpty, s"Found keywords: ${unusedKeywords}, only the following are allowed in current context: ${allowedKeywords}")
+    assert(unusedFields.isEmpty, s"Found unused fields: ${unusedFields}, only the following are allowed in current context: ${allowedFields}")
+  }
+
+  // no return, since no transformation is performed
+  def validateGetSelection(model: InputModel, entityName: String, payload: Map[String,Object]): Unit = {
+    val entity = model.entities(entityName)
+    val allowedKeywords = Set(keywords.query.INCLUDE, keywords.pagination.LIMIT, keywords.pagination.CONTINUE, keywords.pagination.TTL)
+    val unusedKeys = payload.keySet.diff(entity.relations.keySet ++ allowedKeywords)
+    checkUnusedFields(unusedKeys, allowedKeywords, entity.relations.keySet)
+    payload.get(keywords.query.INCLUDE).foreach(_.asInstanceOf[List[String]].foreach(field => assert(entity.fields.contains(field))))
+    entity.relations.values.filter(r => payload.contains(r.name)).foreach(r => validateGetSelection(model, r.targetEntityName, payload(r.name).asInstanceOf[Map[String,Object]]))
+  }
+  def validateGet(model: InputModel, entityName: String, payload: Map[String,Object]): Map[String,Object] = {
+    val conditions = mapWrap(keywords.mutation.MATCH, validateConditions(model, entityName, payload(keywords.mutation.MATCH)))
+    val selection = payload.removed(keywords.mutation.MATCH)
+    validateGetSelection(model, entityName, selection)
+    conditions ++ selection
+  }
+
   def validateEntity(allowedKeywords: Set[String], validateRelation: (String, Object) => Map[String,Object],
                          model: InputModel, entityName: String, payload: Map[String, Object]): Map[String, Object] = {
     assert(!payload.contains(ENTITY_ID_COLUMN_NAME), s"mutation may not specify field: ${ENTITY_ID_COLUMN_NAME}")
     val entity = model.entities(entityName)
-    val unusedKeys = payload.keySet.diff(entity.fields.keySet ++ entity.relations.keySet ++ allowedKeywords)
-    val (unusedKeywords, unusedFields) = unusedKeys.partition(_.startsWith(keywords.KEYWORD_PREFIX))
-    assert(unusedKeywords.isEmpty, s"Found keywords: ${unusedKeywords}, but only the following are allowed in current context: ${allowedKeywords}")
-    assert(unusedFields.isEmpty, s"Entity ${entityName} does not contain fields: ${unusedFields}")
+    val allowedFields = entity.fields.keySet ++ entity.relations.keySet
+    val unusedKeys = payload.keySet.diff(allowedFields ++ allowedKeywords)
+    checkUnusedFields(unusedKeys, allowedKeywords, allowedFields)
     val updatedScalars = entity.fields.values.filter(f => payload.contains(f.name)).map(field => {
       (field.name, field.scalarType.convert(payload(field.name)))
     })
@@ -118,7 +140,19 @@ object validation {
       throw new RuntimeException(
         s"nested mutation request must be either a Map or List[Map], instead got ${payload.getClass}")
     }
+  }
 
+  def validateDeleteSelection(model: InputModel, entityName: String, payload: Map[String,Object]): Unit = {
+    val entity = model.entities(entityName)
+    val unusedKeys = payload.keySet.diff(entity.relations.keySet)
+    checkUnusedFields(unusedKeys, Set.empty, entity.relations.keySet)
+    entity.relations.values.filter(r => payload.contains(r.name)).foreach(r => validateDeleteSelection(model, r.targetEntityName, payload(r.name).asInstanceOf[Map[String,Object]]))
+  }
+  def validateDelete(model: InputModel, entityName: String, payload: Map[String,Object]): Map[String,Object] = {
+    val conditions = mapWrap(keywords.mutation.MATCH, validateConditions(model, entityName, payload(keywords.mutation.MATCH)))
+    val selection = payload.removed(keywords.mutation.MATCH)
+    validateDeleteSelection(model, entityName, selection)
+    conditions ++ selection
   }
 
 }
