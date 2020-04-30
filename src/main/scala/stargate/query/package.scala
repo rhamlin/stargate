@@ -149,7 +149,7 @@ package object query {
   }
 
   def createOne(model: OutputModel, entityName: String, payload: CreateOneMutation, session: CqlSession, executor: ExecutionContext): MutationResult = {
-    val (uuid, creates) = write.createEntity(model.entityTables(entityName), payload)
+    val (uuid, creates) = write.createEntity(model.entityTables(entityName), payload.fields)
     val linkWrapped = payload.relations.map((rm: (String,Mutation)) => (rm._1, LinkMutation(rm._2)))
     val linkResults = mutateAndLinkRelations(model, entityName, uuid, linkWrapped, session, executor)
     linkResults.map(linkResult => (linkResult._1, creates ++ linkResult._2))(executor)

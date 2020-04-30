@@ -58,7 +58,7 @@ object validation {
       val wrapped = if(entity.relations.contains(kv._1)) { Map((keywords.relation.LINK, kv._2)) } else { kv._2 }
       (kv._1, wrapped)
     })
-    val (fields, relations) = validateEntity(model, entityName, payload, Set.empty)
+    val (fields, relations) = validateEntity(model, entityName, wrappedRelationsPayload, Set.empty)
     CreateOneMutation(fields, relations.view.mapValues(v => v.asInstanceOf[LinkMutation].mutation).toMap)
   }
 
@@ -79,9 +79,10 @@ object validation {
       ScalarCondition(field.asInstanceOf[String], ScalarComparison.fromString(comparison.toString), value)
     }
     if(payload == keywords.query.MATCH_ALL) {
-      Map.empty
+      Map((List.empty, List.empty))
     } else if(payload.isInstanceOf[List[Object]]) {
       val payloadList = payload.asInstanceOf[List[Object]]
+      assert(payloadList.nonEmpty)
       val conditions = payloadList.grouped(3).map(parseCondition).toList
       val groupedConditions = schema.groupConditionsByPath(conditions)
       groupedConditions.map(path_conds => {
