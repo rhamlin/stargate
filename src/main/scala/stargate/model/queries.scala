@@ -1,21 +1,24 @@
 package stargate.model
 
+import stargate.schema.GroupedConditions
 import stargate.{keywords, schema}
 
 object queries {
 
-  case class GetQuery(entityName: String, `match`: schema.GroupedConditions[Object], selection: GetSelection)
+  case class GetQuery(`match`: schema.GroupedConditions[Object], selection: GetSelection)
   case class GetSelection(relations: Map[String, GetSelection], include: Option[List[String]], limit: Option[Int], continue: Boolean, ttl: Option[Int])
 
-  case class DeleteQuery(entityName: String, `match`: schema.GroupedConditions[Object], selection: DeleteSelection)
+  case class DeleteQuery(`match`: schema.GroupedConditions[Object], selection: DeleteSelection)
   case class DeleteSelection(relations: Map[String, DeleteSelection])
 
   sealed trait Mutation
-  case class CreateMutation(entityName: String, relations: Map[String, Mutation]) extends Mutation
-  case class UpdateMutation(entityName: String, `match`: schema.GroupedConditions[Object], relations: Map[String, RelationMutation]) extends Mutation
+  case class CreateOneMutation(fields: Map[String,Object], relations: Map[String, Mutation])
+  case class CreateMutation(creates: List[CreateOneMutation]) extends Mutation
+  case class MatchMutation(`match`: GroupedConditions[Object]) extends Mutation
+  case class UpdateMutation(`match`: GroupedConditions[Object], fields: Map[String,Object], relations: Map[String, RelationMutation]) extends Mutation
   sealed trait RelationMutation
   case class LinkMutation(mutation: Mutation) extends RelationMutation
-  case class UnlinkMutation(`match`: schema.GroupedConditions[Object]) extends RelationMutation
+  case class UnlinkMutation(`match`: MatchMutation) extends RelationMutation
   case class ReplaceMutation(mutation: Mutation) extends RelationMutation
 
 

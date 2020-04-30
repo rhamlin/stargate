@@ -2,6 +2,7 @@ package stargate.query
 
 import java.util.UUID
 
+import stargate.model.queries.GetSelection
 import stargate.model.{InputModel, RelationField}
 import stargate.util.AsyncList
 
@@ -10,30 +11,28 @@ import scala.concurrent.{ExecutionContext, Future}
 object pagination {
 
   // maps uuid to stream of entities, as well as the TTL and get request on that stream
-  case class StreamEntry(entityName: String, getRequest: Map[String,Object], ttl: Int, entities: AsyncList[Map[String,Object]])
+  case class StreamEntry(entityName: String, getRequest: GetSelection, ttl: Int, entities: AsyncList[Map[String,Object]])
   type Streams = Map[UUID, StreamEntry]
 
   // given a tree of entities in (lazy) AsyncLists, chop off the first N entities, and return a uuid pointing to the rest of the list
-  def truncate(model: InputModel, entityName: String, getRequest: Map[String,Object],
+  def truncate(model: InputModel, entityName: String, getRequest: GetSelection,
                entities: AsyncList[Map[String,Object]], defaultLimit: Integer, defaultTTL: Integer, executor: ExecutionContext): Future[(List[Map[String,Object]], Streams)] = {
     truncate(model, entityName, getRequest, entities, UUID.randomUUID, defaultLimit, defaultTTL, executor)
   }
 
-  def truncate(model: InputModel, entityName: String, getRequest: Map[String,Object],
-               entities: AsyncList[Map[String,Object]], streamId: UUID, defaultLimit: Integer, defaultTTL: Integer, executor: ExecutionContext): Future[(List[Map[String,Object]], Streams)] = {
+  def truncate(model: InputModel, entityName: String, getRequest: GetSelection,
+               entities: AsyncList[Map[String,Object]], streamId: UUID, defaultLimit: Int, defaultTTL: Int, executor: ExecutionContext): Future[(List[Map[String,Object]], Streams)] = {
 
-    val limit = getRequest.get(stargate.keywords.pagination.LIMIT).map(_.asInstanceOf[Integer]).getOrElse(defaultLimit)
-    val continue = getRequest.get(stargate.keywords.pagination.CONTINUE).map(_.asInstanceOf[java.lang.Boolean]).getOrElse(java.lang.Boolean.FALSE)
-    val ttl = getRequest.get(stargate.keywords.pagination.TTL).map(_.asInstanceOf[Integer]).getOrElse(defaultTTL)
+    val limit = getRequest.limit.getOrElse(defaultLimit)
+    val continue = getRequest.continue
+    val ttl = getRequest.ttl.getOrElse(defaultTTL)
 
     val (head, tail) = entities.splitAt(limit, executor)
     val resultStream: Streams = if(continue) Map((streamId, StreamEntry(entityName, getRequest, ttl, tail))) else Map.empty
 
-    val entity = model.entities(entityName)
-    val includedRelations: Map[String, (RelationField, Object)] = entity.relations.filter(r => getRequest.contains(r._1)).map(nr => (nr._1, (nr._2, getRequest(nr._1))))
     val futureUpdatedEntities = head.map(entities => {
       entities.map(entity => {
-        truncateRelations(model, entityName, includedRelations, entity, defaultLimit, defaultTTL, executor)
+        truncateRelations(model, entityName, getRequest.relations, entity, defaultLimit, defaultTTL, executor)
       })
     })(executor)
     val updatedEntities = futureUpdatedEntities.flatMap(futureUpdatedEntities => {
@@ -57,12 +56,14 @@ object pagination {
   }
 
   // for one entity and a selection of relations (and their corresponding get requests), truncate all children and return their streams
-  def truncateRelations(model: InputModel, entityName: String, relationRequests: Map[String, (RelationField, Object)],
+  def truncateRelations(model: InputModel, entityName: String, relationRequests: Map[String, GetSelection],
                entity: Map[String,Object], defaultLimit: Integer, defaultTTL: Integer, executor: ExecutionContext): Future[(Map[String,Object], Streams)] = {
     implicit val ec: ExecutionContext = executor
+    val modelEntity = model.entities(entityName)
     val childResults = relationRequests.toList.map(name_relation_request => {
-      val (relationName, (relation, request)) = name_relation_request
-      val recurse = truncate(model, relation.targetEntityName, request.asInstanceOf[Map[String,Object]],
+      val (relationName, request) = name_relation_request
+      val relation = modelEntity.relations(relationName)
+      val recurse = truncate(model, relation.targetEntityName, request,
         entity(relationName).asInstanceOf[AsyncList[Map[String,Object]]], defaultLimit, defaultTTL, executor)
       recurse.map((relationName, _))
     })
