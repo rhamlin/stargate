@@ -1,8 +1,8 @@
 package stargate.model
 
-import stargate.keywords
-import stargate.model.queries.{GetQuery, GetSelection}
 import com.typesafe.config.{Config, ConfigFactory, ConfigList}
+import stargate.keywords
+import stargate.model.queries.predefined.GetQuery
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -16,7 +16,7 @@ object parser {
 
   def parseModel(config: Config): InputModel = {
     val entities = parseEntities(config.getConfig(keywords.config.ENTITIES))
-    val queries = parseQueries(Try(config.getConfig(keywords.config.QUERIES)).getOrElse(ConfigFactory.empty))
+    val queries = parseQueries(Try(config.getConfig(keywords.config.QUERIES)).getOrElse(ConfigFactory.empty), entities)
     val conditions = parseQueryConditions(Try(config.getConfig(keywords.config.QUERY_CONDITIONS)).getOrElse(ConfigFactory.empty))
     InputModel(entities, queries, conditions)
   }
@@ -57,42 +57,22 @@ object parser {
 
 
 
-  def parseQueries(config: Config): Map[String, stargate.model.queries.GetQuery] = {
+  def parseQueries(config: Config, entities: Entities): Map[String, GetQuery] = {
     config.root.keySet.asScala.flatMap(entityName => {
       val entityConfig = config.getConfig(entityName)
       entityConfig.root.keySet.asScala.map(queryName => {
         val queryConfig = entityConfig.getConfig(queryName)
-        (queryName, parseGetQuery(queryName, entityName, queryConfig))
+        (queryName, parseGetQuery(queryName, entityName, queryConfig, entities))
       })
     }).toMap
   }
 
-  def parseGetQuery(name: String, entityName: String, config: Config): GetQuery = {
+  def parseGetQuery(name: String, entityName: String, config: Config, entities: Entities): GetQuery = {
     GetQuery(
       queryName = name,
       entityName = entityName,
-      `match` = parseWhereClause(config.getStringList(keywords.mutation.MATCH).asScala.toList),
-      selection = parseGetSelection(config)
+      `match` = queries.parser.parseNamedConditions(entities, List.empty, entityName, stargate.util.javaToScala(config.getValue(keywords.mutation.MATCH).unwrapped)),
+      selection = queries.parser.parseGetSelection(entities, List.empty, entityName, stargate.util.javaToScala(config.root().unwrapped()).asInstanceOf[Map[String,Object]].removed(keywords.mutation.MATCH))
     )
-  }
-
-  def parseWhereClause(config: List[String]): Where = {
-    def parseCondition(cond: List[String]): ScalarCondition[String] = {
-      val field :: op :: argumentName :: _ = cond
-      ScalarCondition(field, ScalarComparison.fromString(op), argumentName)
-    }
-    config.grouped(3).map(parseCondition).toList
-  }
-
-  def getRelationsConf(config: Config): Config = {
-    val removeKeywords = config.root.keySet.asScala.filter(_.startsWith(keywords.KEYWORD_PREFIX))
-    removeKeywords.foldLeft(config)((config, keyword) => config.withoutPath(keyword))
-  }
-
-  def parseGetSelection(config: Config): GetSelection = {
-    val include = config.getStringList(keywords.query.INCLUDE).asScala.toList
-    val relationsConf = getRelationsConf(config)
-    val relations = relationsConf.root.keySet.asScala.map(name => (name, parseGetSelection(relationsConf.getConfig(name)))).toMap
-    GetSelection(include, relations)
   }
 }
