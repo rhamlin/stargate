@@ -1,6 +1,6 @@
 package stargate.query
 
-import stargate.model.{Entities, InputModel, ScalarComparison, ScalarCondition, ScalarField}
+import stargate.model.{Entities, InputModel, ScalarComparison, ScalarCondition, ScalarField, ScalarType}
 import stargate.keywords
 import stargate.model.queries.{CreateMutation, CreateOneMutation, DeleteQuery, DeleteSelection, GetQuery, GetSelection, LinkMutation, MatchMutation, Mutation, RelationMutation, ReplaceMutation, UnlinkMutation, UpdateMutation}
 import stargate.schema
@@ -98,8 +98,8 @@ object validation {
   def validateConditions(entities: Entities, entityName: String, payload: Object): GroupedConditions[Object] = {
     validateConditions((field, arg) => field.scalarType.convert(arg), entities, entityName, payload)
   }
-  def validateNamedConditions(entities: Entities, entityName: String, payload: Object): GroupedConditions[(ScalarField, String)] = {
-    validateConditions((field, arg) => (field, arg.asInstanceOf[String]), entities, entityName, payload)
+  def validateNamedConditions(entities: Entities, entityName: String, payload: Object): GroupedConditions[(ScalarType.Value, String)] = {
+    validateConditions((field, arg) => (field.scalarType, arg.asInstanceOf[String]), entities, entityName, payload)
   }
 
   def validateUpdate(entities: Entities, entityName: String, payload: Map[String, Object]): UpdateMutation = {
