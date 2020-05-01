@@ -67,7 +67,9 @@ class AppstaxServlet(val config: ParsedStarGateConfig)
     val payloadMap = util.fromJson(input).asInstanceOf[Map[String,Object]]
     val query = model.input.queries(queryName)
     val runtimePayload = stargate.model.queries.predefined.transform(query, payloadMap)
-    runQuery(appName, query.entityName, "GET", runtimePayload, resp)
+    val result = stargate.query.getAndTruncate(model, query.entityName, runtimePayload, defaultLimit, defaultTTL, session, executor)
+    val entities = cacheStreams(result)
+    resp.getWriter.write(util.toJson(Await.result(entities, Duration.Inf)))
   }
 
   def cacheStreams(truncatedFuture: Future[(List[Map[String,Object]], Streams)]): Future[List[Map[String,Object]]] = {
