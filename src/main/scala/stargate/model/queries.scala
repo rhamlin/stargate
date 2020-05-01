@@ -24,20 +24,21 @@ object queries {
 
 
   object predefined {
-    case class GetQuery(queryName: String, entityName: String, `match`: Where, selection: GetSelection)
+    case class GetQuery(queryName: String, entityName: String, `match`: GroupedConditions[(ScalarType.Value, String)], selection: GetSelection)
 
-
-    def transform(query: GetQuery, payload: Map[String,Object]): Map[String,Object] = {
+    def transform(query: GetQuery, payload: Map[String,Object]): queries.GetQuery = {
       val matchArguments = payload(keywords.mutation.MATCH).asInstanceOf[Map[String,Object]]
-      val substitutions = query.`match`.map(cond => cond.replaceArgument(matchArguments(cond.argument)))
-      val matchPayload = Map((keywords.mutation.MATCH, substitutions.flatMap(cond => List(cond.field, cond.comparison, cond.argument))))
-      val selectionPayload = transform(query.selection)
-      matchPayload ++ selectionPayload
+      val substitutions = query.`match`.view.mapValues(_.map(cond => cond.replaceArgument(cond.argument._1.convert(matchArguments(cond.argument._2))))).toMap
+      val selectionPayload = transform(query.selection, payload)
+      queries.GetQuery(substitutions, selectionPayload)
     }
-    def transform(selection: GetSelection): Map[String,Object] = {
-      val fields = Map((keywords.query.INCLUDE, selection.include))
-      val relations = selection.relations.map((name_selection:(String, GetSelection)) => (name_selection._1, transform(name_selection._2)))
-      fields ++ relations
+    def transform(selection: GetSelection, payload: Map[String,Object]): GetSelection = {
+      val relations = selection.relations.map((name_selection:(String, GetSelection)) =>
+        (name_selection._1, transform(name_selection._2, payload.get(name_selection._1).map(_.asInstanceOf[Map[String,Object]]).getOrElse(Map.empty))))
+      val limit: Option[Int] = payload.get(keywords.pagination.LIMIT).map(_.asInstanceOf[Int]).orElse(selection.limit)
+      val continue: Boolean = payload.get(keywords.pagination.CONTINUE).map(_.asInstanceOf[Boolean]).getOrElse(selection.continue)
+      val ttl: Option[Int] = payload.get(keywords.pagination.TTL).map(_.asInstanceOf[Int]).orElse(selection.ttl)
+      GetSelection(relations, selection.include, limit, continue, ttl)
     }
 
   }
