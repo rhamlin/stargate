@@ -22,7 +22,7 @@ class PaginationTest {
 
   def query(model: OutputModel, limit: Int, branching: Int, session: CqlSession, executor: ExecutionContext): Unit = {
     val req = Map(
-      (stargate.keywords.mutation.MATCH, List.empty),
+      (stargate.keywords.mutation.MATCH, "all"),
       (stargate.keywords.pagination.LIMIT, Integer.valueOf(limit)),
       (stargate.keywords.pagination.CONTINUE, java.lang.Boolean.valueOf(true)),
       ("b", Map(
