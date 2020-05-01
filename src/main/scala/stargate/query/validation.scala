@@ -8,9 +8,6 @@ import stargate.schema.{ENTITY_ID_COLUMN_NAME, GroupedConditions}
 
 object validation {
 
-  def mapWrap[T](key: String, value: T) = Map((key, value))
-
-
   def checkUnusedFields(unusedKeys: Set[String], allowedKeywords: Set[String], allowedFields: Set[String]) = {
     val (unusedKeywords, unusedFields) = unusedKeys.partition(_.startsWith(keywords.KEYWORD_PREFIX))
     assert(unusedKeywords.isEmpty, s"Found keywords: ${unusedKeywords}, only the following are allowed in current context: ${allowedKeywords}")
