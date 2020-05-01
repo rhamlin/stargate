@@ -1,12 +1,10 @@
-package stargate.query
+package stargate.model.queries
 
-import stargate.model.{Entities, InputModel, ScalarComparison, ScalarCondition, ScalarField, ScalarType}
-import stargate.keywords
-import stargate.model.queries.{CreateMutation, CreateOneMutation, DeleteQuery, DeleteSelection, GetQuery, GetSelection, LinkMutation, MatchMutation, Mutation, RelationMutation, ReplaceMutation, UnlinkMutation, UpdateMutation}
-import stargate.schema
+import stargate.model._
 import stargate.schema.{ENTITY_ID_COLUMN_NAME, GroupedConditions}
+import stargate.{keywords, schema}
 
-object validation {
+object parser {
 
   def checkUnusedFields(unusedKeys: Set[String], allowedKeywords: Set[String], allowedFields: Set[String]) = {
     val (unusedKeywords, unusedFields) = unusedKeys.partition(_.startsWith(keywords.KEYWORD_PREFIX))

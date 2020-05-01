@@ -1,9 +1,10 @@
 package stargate.model
 
+import stargate.model.ScalarType
 import stargate.schema.GroupedConditions
 import stargate.{keywords, schema}
 
-object queries {
+package object queries {
 
   case class GetQuery(`match`: schema.GroupedConditions[Object], selection: GetSelection)
   case class GetSelection(relations: Map[String, GetSelection], include: Option[List[String]], limit: Option[Int], continue: Boolean, ttl: Option[Int])

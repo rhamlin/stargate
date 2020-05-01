@@ -1,10 +1,8 @@
 package stargate.model
 
-import stargate.keywords
-import stargate.model.queries.GetSelection
-import stargate.model.queries.predefined.GetQuery
 import com.typesafe.config.{Config, ConfigFactory, ConfigList}
-import stargate.query.validation
+import stargate.keywords
+import stargate.model.queries.predefined.GetQuery
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -73,8 +71,8 @@ object parser {
     GetQuery(
       queryName = name,
       entityName = entityName,
-      `match` = validation.validateNamedConditions(entities, entityName, stargate.util.javaToScala(config.getValue(keywords.mutation.MATCH).unwrapped)),
-      selection = validation.validateGetSelection(entities, entityName, stargate.util.javaToScala(config.root().unwrapped()).asInstanceOf[Map[String,Object]].removed(keywords.mutation.MATCH))
+      `match` = queries.parser.validateNamedConditions(entities, entityName, stargate.util.javaToScala(config.getValue(keywords.mutation.MATCH).unwrapped)),
+      selection = queries.parser.validateGetSelection(entities, entityName, stargate.util.javaToScala(config.root().unwrapped()).asInstanceOf[Map[String,Object]].removed(keywords.mutation.MATCH))
     )
   }
 }
