@@ -37,18 +37,16 @@ def create():
             # child entities (to be linked, unlinked, etc) can be either creates (new) or updates (existing)
             # if neither create nor update are specified, defaults to crete
             "street": "kent st",
-            "zip":"22046"
+            "zipCode":"22046"
         },
         "orders":[
             # links parent customer to a new order, which is linked to any existing products with the name "widget"
             {
                 "time": 12345,
                 "products": {
-                    "-link": {
                         "-update": {
                             "-match": ["name", "=", "widget"]
                         }
-                    }
                 }
             },
             # links parent customer to a new order with no products
@@ -56,9 +54,7 @@ def create():
             {
                 "total": 0,
                 "products": {
-                    "-replace": {
                         "-create": []
-                    }
                 }
             }
         ]

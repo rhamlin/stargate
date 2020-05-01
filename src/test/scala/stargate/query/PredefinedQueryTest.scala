@@ -27,7 +27,7 @@ class PredefinedQueryTest {
       Await.result(entity, Duration.Inf)
     })
     val req = stargate.model.queries.predefined.transform(model.input.queries("getAandB"),  Map((stargate.keywords.mutation.MATCH, Map.empty)))
-    val entities = Await.result(stargate.query.untyped.getAndTruncate(model, "A", req, 10000, session, executor), Duration.Inf)
+    val entities = Await.result(stargate.query.getAndTruncate(model, "A", req, 10000, session, executor), Duration.Inf)
     entities.foreach(a => {
       assertEquals(a.keySet, Set("x", "y", "b"))
       a("b").asInstanceOf[List[Map[String,Object]]].foreach(b => {
