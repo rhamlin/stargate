@@ -64,8 +64,9 @@ package object model {
   def conditionNames(where: Where): NamedConditions = where.map(_.named)
 
 
+  type Entities = Map[String, Entity]
   case class InputModel(
-    entities: Map[String, Entity],
+    entities: Entities,
     queries: Map[String, GetQuery],
     conditions: Map[String, List[NamedConditions]]
   ) {
