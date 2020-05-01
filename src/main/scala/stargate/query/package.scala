@@ -26,7 +26,7 @@ package object query {
   // for a root-entity and relation path, apply selection conditions to get list of ids of the target entity type
   def matchEntities(model: OutputModel, rootEntityName: String, relationPath: List[String], conditions: List[ScalarCondition[Term]], session: CqlSession, executor: ExecutionContext): AsyncList[UUID] = {
     // TODO: when condition is just List((entityId, =, _)) or List((entityId, IN, _)), then return the ids in condition immediately without querying
-    val entityName = schema.traverseEntityPath(model.input, rootEntityName, relationPath)
+    val entityName = schema.traverseEntityPath(model.input.entities, rootEntityName, relationPath)
     val entityTables = model.entityTables(entityName)
     val tableScores = schema.tableScores(conditions.map(_.named), entityTables)
     val bestScore = tableScores.keys.min
@@ -57,7 +57,7 @@ package object query {
     if(relationPath.isEmpty) {
       relatedIds
     } else {
-      val relations = schema.traverseRelationPath(model.input, rootEntityName, relationPath).reverse
+      val relations = schema.traverseRelationPath(model.input.entities, rootEntityName, relationPath).reverse
       val newRootEntityName = relations.head.targetEntityName
       val inversePath = relations.map(_.inverseName)
       resolveRelations(model, newRootEntityName, inversePath, relatedIds, session, executor)
