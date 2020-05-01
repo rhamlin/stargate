@@ -86,7 +86,7 @@ object validation {
         val (path, conditions) = path_conds
         val targetEntityName = schema.traverseEntityPath(entities, entityName, path)
         val targetEntity = entities(targetEntityName)
-        val validatedConditions = conditions.map(condition => condition.replaceArgument(validateArgument(targetEntity.fields(condition.field, condition.argument))))
+        val validatedConditions = conditions.map(condition => condition.replaceArgument(validateArgument(targetEntity.fields(condition.field), condition.argument)))
         (path, validatedConditions)
       })
     } else {
