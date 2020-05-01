@@ -53,10 +53,10 @@ object write {
   def entityIdPayload(entityId: UUID): Map[String,UUID] = Map((schema.ENTITY_ID_COLUMN_NAME, entityId))
   def entityIdPayload(entity: Map[String,Object]): Map[String,UUID] = entityIdPayload(entity(schema.ENTITY_ID_COLUMN_NAME).asInstanceOf[UUID])
 
-  def createEntity(tables: List[CassandraTable], payload: Object): (UUID, List[SimpleStatement]) = {
+  def createEntity(tables: List[CassandraTable], payload: Map[String,Object]): (UUID, List[SimpleStatement]) = {
     // TODO - could use cassandra-generated timeuuid instead of random, but then the first write would block all the secondary writes
     val uuid = UUID.randomUUID()
-    val payloadMap = payload.asInstanceOf[Map[String,Object]].updated(schema.ENTITY_ID_COLUMN_NAME, uuid)
+    val payloadMap = payload.updated(schema.ENTITY_ID_COLUMN_NAME, uuid)
     val inserts = tables.map(t => insertStatement(t, payloadMap)).filter(_.isDefined).map(_.get.build)
     (uuid, inserts)
   }

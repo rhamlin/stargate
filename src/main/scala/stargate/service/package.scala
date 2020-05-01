@@ -4,7 +4,7 @@ import java.io.File
 import java.util.UUID
 import java.util.concurrent._
 
-import stargate.model.OutputModel
+import stargate.model.{OutputModel, queries}
 import stargate.query.pagination.{StreamEntry, Streams}
 import stargate.service.http
 import stargate.metrics
@@ -66,8 +66,10 @@ class AppstaxServlet(val config: ParsedStarGateConfig)
     val (session, model) = apps.get(appName)
     val payloadMap = util.fromJson(input).asInstanceOf[Map[String,Object]]
     val query = model.input.queries(queryName)
-    val runtimePayload = stargate.model.queries.transform(query, payloadMap)
-    runQuery(appName, query.entityName, "GET", runtimePayload, resp)
+    val runtimePayload = queries.predefined.transform(query, payloadMap)
+    val result = stargate.query.getAndTruncate(model, query.entityName, runtimePayload, defaultLimit, defaultTTL, session, executor)
+    val entities = cacheStreams(result)
+    resp.getWriter.write(util.toJson(Await.result(entities, Duration.Inf)))
   }
 
   def cacheStreams(truncatedFuture: Future[(List[Map[String,Object]], Streams)]): Future[List[Map[String,Object]]] = {
@@ -111,7 +113,7 @@ class AppstaxServlet(val config: ParsedStarGateConfig)
 
     val result: Future[Object] = op match {
       case "GET" => {
-        val result = query.getAndTruncate(model, entity, payloadMap.get, defaultLimit, defaultTTL, session, executor)
+        val result = query.untyped.getAndTruncate(model, entity, payloadMap.get, defaultLimit, defaultTTL, session, executor)
         cacheStreams(result)
       }
       case "POST" => model.mutation.create(entity, payload, session, executor)

@@ -1,7 +1,7 @@
 package stargate.query
 
 import stargate.CassandraTest
-import stargate.model.parser
+import stargate.model.{parser, queries}
 import com.typesafe.config.ConfigFactory
 import org.junit.{AfterClass, BeforeClass, Test}
 import org.junit.Assert._
@@ -26,7 +26,7 @@ class PredefinedQueryTest {
       val entity = EntityCRUDTest.createEntityWithIds(model, model.mutation, "A", session, executor)
       Await.result(entity, Duration.Inf)
     })
-    val req = stargate.model.queries.transform(model.input.queries("getAandB"),  Map((stargate.keywords.mutation.MATCH, Map.empty)))
+    val req = queries.predefined.transform(model.input.queries("getAandB"),  Map((stargate.keywords.mutation.MATCH, Map.empty)))
     val entities = Await.result(stargate.query.getAndTruncate(model, "A", req, 10000, session, executor), Duration.Inf)
     entities.foreach(a => {
       assertEquals(a.keySet, Set("x", "y", "b"))

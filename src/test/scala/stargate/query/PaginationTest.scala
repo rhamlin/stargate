@@ -21,8 +21,8 @@ class PaginationTest {
   }
 
   def query(model: OutputModel, limit: Int, branching: Int, session: CqlSession, executor: ExecutionContext): Unit = {
-    val req = Map(
-      (stargate.keywords.mutation.MATCH, List.empty),
+    val req = Map[String,Object](
+      (stargate.keywords.mutation.MATCH, "all"),
       (stargate.keywords.pagination.LIMIT, Integer.valueOf(limit)),
       (stargate.keywords.pagination.CONTINUE, java.lang.Boolean.valueOf(true)),
       ("b", Map(
@@ -34,7 +34,7 @@ class PaginationTest {
         )),
       ))
     )
-    val (entities, streams) = Await.result(stargate.query.getAndTruncate(model, "A", req, limit, 0, session, executor), Duration.Inf)
+    val (entities, streams) = Await.result(stargate.query.untyped.getAndTruncate(model, "A", req, limit, 0, session, executor), Duration.Inf)
     assert(entities.length <= limit || (entities.length == limit + 1 && entities.last.contains(stargate.keywords.pagination.CONTINUE)))
     streams.values.foreach((ttl_stream) => Await.result(ttl_stream.entities.length(executor), Duration.Inf) == branching - limit)
   }

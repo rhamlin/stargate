@@ -7,6 +7,7 @@ object keywords {
   object query {
     val GET: String = KEYWORD_PREFIX + config.query.op.GET
     val INCLUDE: String = KEYWORD_PREFIX + "include"
+    val MATCH_ALL: String = "all"
   }
 
   object mutation {

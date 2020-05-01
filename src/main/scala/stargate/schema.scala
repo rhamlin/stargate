@@ -19,6 +19,8 @@ object schema {
   val relationTableColumns = CassandraColumns(relationTableKey, List.empty)
   val relationTableTypes = Map((RELATION_FROM_COLUMN_NAME, DataTypes.UUID), (RELATION_TO_COLUMN_NAME, DataTypes.UUID))
 
+  type GroupedConditions[T] = Map[List[String], List[ScalarCondition[T]]]
+
   def appendEntityIdKey(key: CassandraKeyNames): CassandraKeyNames = {
     if(key.combined.contains(ENTITY_ID_COLUMN_NAME)){
       key
@@ -81,35 +83,40 @@ object schema {
     entity.relations.toList.map((name_rel) => ((entity.name, name_rel._1), toTable(name_rel._1))).toMap
   }
 
-  def groupConditionsByPath[T](conditions: List[T], conditionColumn: T=>String): Map[List[String], List[T]] = {
+  def groupConditionsByPath[T](conditions: List[T], conditionColumn: T=>String): Map[List[String], List[(String,T)]] = {
     val parsedByEntity = conditions.map(cond => {
       val cols = conditionColumn(cond).split(RELATION_SPLIT_REGEX)
-      val (path, _) = cols.splitAt(cols.length - 1)
-      (path.toList, cond)
+      val (path, scalar) = cols.splitAt(cols.length - 1)
+      (path.toList, (scalar(0), cond))
     })
     parsedByEntity.groupMap(_._1)(_._2)
   }
 
-  def groupConditionsByPath(conditions: NamedConditions): Map[List[String], NamedConditions] = {
-    val grouped = groupConditionsByPath(conditions, (x:NamedCondition) => x.field)
-    grouped.view.mapValues(_.map(x => NamedCondition(x.field.split(RELATION_SPLIT_REGEX).last, x.comparison))).toMap
+  def groupNamedConditionsByPath(conditions: NamedConditions): Map[List[String], NamedConditions] = {
+    val grouped = groupConditionsByPath(conditions, (_:NamedCondition).field)
+    grouped.view.mapValues(_.map(x => NamedCondition(x._1, x._2.comparison))).toMap
   }
 
-  def traverseRelationPath(model: InputModel, entityName: String, path: List[String]): List[RelationField] = {
+  def groupConditionsByPath[T](conditions: List[ScalarCondition[T]]): GroupedConditions[T] = {
+    val grouped = groupConditionsByPath(conditions, (_:ScalarCondition[T]).field)
+    grouped.view.mapValues(_.map(x => ScalarCondition(x._1, x._2.comparison, x._2.argument))).toMap
+  }
+
+  def traverseRelationPath(model: Entities, entityName: String, path: List[String]): List[RelationField] = {
     if(path.isEmpty) {
       List.empty
     } else {
-      val relation = model.entities(entityName).relations(path.head)
+      val relation = model(entityName).relations(path.head)
       val nextEntity = relation.targetEntityName
       relation +: traverseRelationPath(model, nextEntity, path.tail)
     }
   }
   // TODO - clean up duplication between these two (to get entity name would have to get it from last O(N) of relation path)
-  def traverseEntityPath(model: InputModel, entityName: String, path: List[String]): String = {
+  def traverseEntityPath(model: Entities, entityName: String, path: List[String]): String = {
     if(path.isEmpty) {
       entityName
     } else {
-      val nextEntity = model.entities(entityName).relations(path.head).targetEntityName
+      val nextEntity = model(entityName).relations(path.head).targetEntityName
       traverseEntityPath(model, nextEntity, path.tail)
     }
   }
@@ -118,9 +125,9 @@ object schema {
     if(conditions.isEmpty) {
       return Map.empty
     }
-    val groupedConditions = groupConditionsByPath(conditions)
+    val groupedConditions = groupNamedConditionsByPath(conditions)
     val tables = groupedConditions.toList.map(path_conds => {
-      val entityName = traverseEntityPath(model, rootEntity, path_conds._1)
+      val entityName = traverseEntityPath(model.entities, rootEntity, path_conds._1)
       val keyNames =  appendEntityIdKey(conditionsKey(path_conds._2, model.cardinality(entityName, _), minPartitions))
       val tableName = viewTableName(entityName, keyNames)
       def nameToCol(name: String) = CassandraColumn(name, model.fieldColumnType(entityName, name))
