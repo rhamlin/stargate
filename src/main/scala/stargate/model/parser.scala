@@ -71,8 +71,8 @@ object parser {
     GetQuery(
       queryName = name,
       entityName = entityName,
-      `match` = queries.parser.parseNamedConditions(entities, entityName, stargate.util.javaToScala(config.getValue(keywords.mutation.MATCH).unwrapped)),
-      selection = queries.parser.parseGetSelection(entities, entityName, stargate.util.javaToScala(config.root().unwrapped()).asInstanceOf[Map[String,Object]].removed(keywords.mutation.MATCH))
+      `match` = queries.parser.parseNamedConditions(entities, List.empty, entityName, stargate.util.javaToScala(config.getValue(keywords.mutation.MATCH).unwrapped)),
+      selection = queries.parser.parseGetSelection(entities, List.empty, entityName, stargate.util.javaToScala(config.root().unwrapped()).asInstanceOf[Map[String,Object]].removed(keywords.mutation.MATCH))
     )
   }
 }

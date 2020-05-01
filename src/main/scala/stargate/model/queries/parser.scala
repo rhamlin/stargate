@@ -18,12 +18,12 @@ object parser {
 
   def checkUnusedFields(context: List[String], unusedKeys: Set[String], allowedKeywords: Set[String], allowedFields: Set[String]) = {
     val (unusedKeywords, unusedFields) = unusedKeys.partition(_.startsWith(keywords.KEYWORD_PREFIX))
-    assert(unusedKeywords.isEmpty, s"Found keywords: ${unusedKeywords}, only the following are allowed: ${allowedKeywords}, ${contextMessage(context)}")
-    assert(unusedFields.isEmpty, s"Found unused fields: ${unusedFields}, only the following are allowed: ${allowedFields}, ${contextMessage(context)}")
+    require(unusedKeywords.isEmpty, s"Found keywords: ${unusedKeywords}, only the following are allowed: ${allowedKeywords}, ${contextMessage(context)}")
+    require(unusedFields.isEmpty, s"Found unused fields: ${unusedFields}, only the following are allowed: ${allowedFields}, ${contextMessage(context)}")
   }
-  def cast[T](context: List[String], value: Object): T = {
-    val cast = Try(value.asInstanceOf[T])
-    assert(cast.isSuccess, s"Expected value of type: ${classOf[T]}, but found: ${value.getClass}, ${contextMessage(context)}")
+  def cast[T](context: List[String], value: Object, toType: Class[T]): T = {
+    val cast = Try(toType.cast(value))
+    require(cast.isSuccess, s"Failed to cast type ${contextMessage(context)}, expected ${toType}, but got ${value.getClass}")
     cast.get
   }
 
@@ -35,12 +35,13 @@ object parser {
     val allowedKeywords = Set(INCLUDE, LIMIT, CONTINUE, TTL)
     val unusedKeys = payload.keySet.diff(entity.relations.keySet ++ allowedKeywords)
     checkUnusedFields(context, unusedKeys, allowedKeywords, entity.relations.keySet)
-    val include: Option[List[String]] = payload.get(INCLUDE).map(cast(INCLUDE +: context, _))
-    include.foreach(_.foreach(field => assert(entity.fields.contains(field), s"Entity ${entity} does not have a field ${field} ${contextMessage(context)}")))
-    val relations = entity.relations.values.filter(r => payload.contains(r.name)).map(r => (r.name, parseGetSelection(entities, r.name +: context, r.targetEntityName, cast(r.name +: context, payload(r.name)))))
-    val limit: Option[Int] = payload.get(LIMIT).map(cast(LIMIT +: context, _))
-    val continue: java.lang.Boolean = payload.get(CONTINUE).map(cast(CONTINUE +: context, _)).getOrElse(java.lang.Boolean.FALSE)
-    val ttl: Option[Int] = payload.get(TTL).map(cast(TTL +: context, _))
+    val include: Option[List[String]] = payload.get(INCLUDE).map(cast(INCLUDE +: context, _, classOf[List[String]]))
+    include.foreach(_.foreach(field => require(entity.fields.contains(field), s"Entity ${entity} does not have a field ${field} ${contextMessage(context)}")))
+    val relations = entity.relations.values.filter(r => payload.contains(r.name)).map(r =>
+      (r.name, parseGetSelection(entities, r.name +: context, r.targetEntityName, cast(r.name +: context, payload(r.name), classOf[Map[String,Object]]))))
+    val limit: Option[Int] = payload.get(LIMIT).map(cast(LIMIT +: context, _, classOf[Int]))
+    val continue: java.lang.Boolean = payload.get(CONTINUE).exists(cast(CONTINUE +: context, _, classOf[Boolean]))
+    val ttl: Option[Int] = payload.get(TTL).map(cast(TTL +: context, _, classOf[Int]))
     GetSelection(relations.toMap, include, limit, continue, ttl)
   }
   def parseGet(entities: Entities, entityName: String, payload: Map[String,Object]): GetQuery = {
@@ -50,19 +51,19 @@ object parser {
   }
 
   def parseEntity(entities: Entities, context: List[String], entityName: String, payload: Map[String, Object], allowedKeywords: Set[String]): (Map[String,Object], Map[String, RelationMutation]) = {
-    assert(!payload.contains(ENTITY_ID_COLUMN_NAME), s"mutation may not specify field: ${ENTITY_ID_COLUMN_NAME}, ${contextMessage(context)}")
+    require(!payload.contains(ENTITY_ID_COLUMN_NAME), s"mutation may not specify field: ${ENTITY_ID_COLUMN_NAME}, ${contextMessage(context)}")
     val entity = entities(entityName)
     val allowedFields = entity.fields.keySet ++ entity.relations.keySet
     val unusedKeys = payload.keySet.diff(allowedFields ++ allowedKeywords)
     checkUnusedFields(context, unusedKeys, allowedKeywords, allowedFields)
     val updatedScalars = entity.fields.values.filter(f => payload.contains(f.name)).map(field => {
       val converted = Try(field.scalarType.convert(payload(field.name)))
-      assert(converted.isSuccess, s"Field type check failed ${contextMessage(field.name +: context)}: ${converted.failed.get}")
+      require(converted.isSuccess, s"Field type check failed ${contextMessage(field.name +: context)}: ${converted.failed.get}")
       (field.name, converted.get)
     })
     val updatedRelations = entity.relations.values.filter(r => payload.contains(r.name)).map(relation => {
       val nextContext = relation.name +: context
-      (relation.name, parseLinkMutation(entities, nextContext, relation.targetEntityName, cast(nextContext, payload(relation.name))))
+      (relation.name, parseLinkMutation(entities, nextContext, relation.targetEntityName, cast(nextContext, payload(relation.name), classOf[Map[String,Object]])))
     })
     (updatedScalars.toMap, updatedRelations.toMap)
   }
@@ -94,26 +95,26 @@ object parser {
 
   def parseConditions[T](validateArgument: (List[String], ScalarField, Object) => T, entities: Entities, context:List[String], entityName: String, payload: Object): GroupedConditions[T] = {
     def parseCondition(field_op_val: List[Object]): ScalarCondition[Object] = {
-      assert(field_op_val.length == 3, s"condition must have exactly 3 elements (field, comparison, argument) ${contextMessage(context)}")
+      require(field_op_val.length == 3, s"condition must have exactly 3 elements (field, comparison, argument) ${contextMessage(context)}")
       val field :: comparison :: value :: _ = field_op_val
       val parsedComparison = Try(ScalarComparison.fromString(comparison.toString))
-      assert(parsedComparison.isSuccess, s"Found invalid comparison operator: ${comparison} ${contextMessage(context)}, valid options are: ${ScalarComparison.names.keySet}")
-      ScalarCondition(cast(field +: context, field), parsedComparison.get, value)
+      require(parsedComparison.isSuccess, s"Found invalid comparison operator: ${comparison} ${contextMessage(context)}, valid options are: ${ScalarComparison.names.keySet}")
+      ScalarCondition(cast(field.toString +: context, field, classOf[String]), parsedComparison.get, value)
     }
     if(payload == keywords.query.MATCH_ALL) {
       Map((List.empty, List.empty))
     } else if(payload.isInstanceOf[List[Object]]) {
       val payloadList = payload.asInstanceOf[List[Object]]
-      assert(payloadList.nonEmpty, s"""match conditions must be either a non-empty list of triples, or the keyword "${keywords.query.MATCH_ALL}" ${contextMessage(context)}""")
+      require(payloadList.nonEmpty, s"""match conditions must be either a non-empty list of triples, or the keyword "${keywords.query.MATCH_ALL}" ${contextMessage(context)}""")
       val conditions = payloadList.grouped(3).map(parseCondition).toList
       val groupedConditions = schema.groupConditionsByPath(conditions)
       groupedConditions.map(path_conds => {
         val (path, conditions) = path_conds
         val targetEntity = Try(entities(schema.traverseEntityPath(entities, entityName, path)))
-        assert(targetEntity.isSuccess, s"${path.mkString(".")} does not represent a valid scalar for entity ${entityName} ${contextMessage(context)}")
+        require(targetEntity.isSuccess, s"${path.mkString(".")} does not represent a valid scalar for entity ${entityName} ${contextMessage(context)}")
         val validatedConditions = conditions.map(condition => {
           val targetField = Try(targetEntity.get.fields(condition.field))
-          assert(targetField.isSuccess, s"Field ${condition.field} does not represent a valid scalar for entity ${targetEntity.get.name} ${contextMessage(context)}")
+          require(targetField.isSuccess, s"Field ${condition.field} does not represent a valid scalar for entity ${targetEntity.get.name} ${contextMessage(context)}")
           condition.replaceArgument(validateArgument(context, targetField.get, condition.argument))
         })
         (path, validatedConditions)
@@ -127,19 +128,19 @@ object parser {
   def parseConditions(entities: Entities, context:List[String], entityName: String, payload: Object): GroupedConditions[Object] = {
     def convert(context:List[String], field: ScalarField, arg: Object): Object = {
       val converted = Try(field.scalarType.convert(arg))
-      assert(converted.isSuccess, s"Failed to convert field ${field.name} to type ${field.scalarType.name} from type ${arg.getClass} ${contextMessage(context)}")
+      require(converted.isSuccess, s"Failed to convert field ${field.name} to type ${field.scalarType.name} from type ${arg.getClass} ${contextMessage(context)}")
       converted.get
     }
     parseConditions(convert, entities, context, entityName, payload)
   }
   def parseNamedConditions(entities: Entities, context:List[String], entityName: String, payload: Object): GroupedConditions[(ScalarType.Value, String)] = {
-    def convert(context:List[String], field: ScalarField, arg: Object): (ScalarType.Value, String) = (field.scalarType, cast(field.name +: context, arg))
+    def convert(context:List[String], field: ScalarField, arg: Object): (ScalarType.Value, String) = (field.scalarType, cast(field.name +: context, arg, classOf[String]))
     parseConditions(convert, entities, context, entityName, payload)
   }
 
   def parseUpdate(entities: Entities, context:List[String], entityName: String, payload: Map[String, Object]): UpdateMutation = {
     import keywords.mutation.MATCH
-    assert(payload.contains(MATCH), s"""Update request must contain keyword "${MATCH}" to specify match conditions ${contextMessage(context)}""")
+    require(payload.contains(MATCH), s"""Update request must contain keyword "${MATCH}" to specify match conditions ${contextMessage(context)}""")
     val conditions = parseConditions(entities, MATCH +: context, entityName, payload(keywords.mutation.MATCH))
     val (fields, relations) = parseEntity(entities, context, entityName, payload.removed(keywords.mutation.MATCH), Set.empty)
     UpdateMutation(conditions, fields, relations)
@@ -195,7 +196,7 @@ object parser {
     val unusedKeys = payload.keySet.diff(entity.relations.keySet)
     checkUnusedFields(context, unusedKeys, Set.empty, entity.relations.keySet)
     val relations = entity.relations.values.filter(r => payload.contains(r.name)).map(r => {
-      (r.name, parseDeleteSelection(entities, r.name +: context, r.targetEntityName, cast(r.name +: context, payload(r.name))))
+      (r.name, parseDeleteSelection(entities, r.name +: context, r.targetEntityName, cast(r.name +: context, payload(r.name), classOf[Map[String,Object]])))
     })
     DeleteSelection(relations.toMap)
   }
