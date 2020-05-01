@@ -1,6 +1,6 @@
 package stargate.query
 
-import stargate.model.{Entities, InputModel, ScalarComparison, ScalarCondition}
+import stargate.model.{Entities, InputModel, ScalarComparison, ScalarCondition, ScalarField}
 import stargate.keywords
 import stargate.model.queries.{CreateMutation, CreateOneMutation, DeleteQuery, DeleteSelection, GetQuery, GetSelection, LinkMutation, MatchMutation, Mutation, RelationMutation, ReplaceMutation, UnlinkMutation, UpdateMutation}
 import stargate.schema
@@ -73,7 +73,7 @@ object validation {
     CreateMutation(createOnes)
   }
 
-  def validateConditions(entities: Entities, entityName: String, payload: Object): GroupedConditions[Object] = {
+  def validateConditions[T](validateArgument: (ScalarField, Object) => T, entities: Entities, entityName: String, payload: Object): GroupedConditions[T] = {
     def parseCondition(field_op_val: List[Object]): ScalarCondition[Object] = {
       val field :: comparison :: value :: _ = field_op_val
       ScalarCondition(field.asInstanceOf[String], ScalarComparison.fromString(comparison.toString), value)
@@ -89,7 +89,7 @@ object validation {
         val (path, conditions) = path_conds
         val targetEntityName = schema.traverseEntityPath(entities, entityName, path)
         val targetEntity = entities(targetEntityName)
-        val validatedConditions = conditions.map(condition => condition.replaceArgument(targetEntity.fields(condition.field).scalarType.convert(condition.argument)))
+        val validatedConditions = conditions.map(condition => condition.replaceArgument(validateArgument(targetEntity.fields(condition.field, condition.argument))))
         (path, validatedConditions)
       })
     } else {
@@ -97,6 +97,12 @@ object validation {
         s"""conditions must be either a non-empty List[Object] of (field, comparison, argument) triples,
         | or the string "${keywords.query.MATCH_ALL}", instead got ${payload.getClass}""".stripMargin)
     }
+  }
+  def validateConditions(entities: Entities, entityName: String, payload: Object): GroupedConditions[Object] = {
+    validateConditions((field, arg) => field.scalarType.convert(arg), entities, entityName, payload)
+  }
+  def validateNamedConditions(entities: Entities, entityName: String, payload: Object): GroupedConditions[(ScalarField, String)] = {
+    validateConditions((field, arg) => (field, arg.asInstanceOf[String]), entities, entityName, payload)
   }
 
   def validateUpdate(entities: Entities, entityName: String, payload: Map[String, Object]): UpdateMutation = {
