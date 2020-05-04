@@ -17,13 +17,51 @@ package cmd
 
 import (
 	"log"
+	"os"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 )
 
-// watchCmd represents the watch command
-var watchCmd = &cobra.Command{
+func applyUpdate(cmd *cobra.Command, name, path, url string, ready chan bool) {
+	Apply(cmd, name, path, url, true)
+	ready <- true
+}
+
+func fileUpdate(cmd *cobra.Command, name, path, url string, events chan fsnotify.Event) {
+	newUpdate, waiting := false, false
+	ready := make(chan bool)
+	for {
+		select {
+		case event := <-events:
+			if event.Op&fsnotify.Write == fsnotify.Write {
+				if waiting {
+					newUpdate = true
+				} else {
+					waiting = true
+					go applyUpdate(cmd, name, path, url, ready)
+				}
+			}
+		case <-ready:
+			if newUpdate {
+				newUpdate = false
+				go applyUpdate(cmd, name, path, url, ready)
+			} else {
+				waiting = false
+			}
+		}
+	}
+}
+
+func fileError(cmd *cobra.Command, done chan bool, Errors chan error) {
+	for err := range Errors {
+		cmd.PrintErrln(err)
+	}
+	done <- true
+}
+
+// WatchCmd represents the watch command
+var WatchCmd = &cobra.Command{
 	Short:   "Watch a schema file and apply schema to a stargate server",
 	Long:    `Watch a schema file and apply schema to a stargate server`,
 	Use:     "watch [name] [path] [host]",
@@ -38,47 +76,21 @@ var watchCmd = &cobra.Command{
 
 		name, path, url := args[0], args[1], args[2]
 
-		Apply(name, path, url, true)
+		Apply(cmd, name, path, url, true)
 
 		done := make(chan bool)
-		go func() {
-			for {
-				select {
-				case event, ok := <-watcher.Events:
-					if !ok {
-						return
-					}
 
-					if event.Op&fsnotify.Write == fsnotify.Write {
-						Apply(name, path, url, true)
-					}
-				case err, ok := <-watcher.Errors:
-					if !ok {
-						return
-					}
-					log.Println("error:", err)
-				}
-			}
-		}()
+		go fileUpdate(cmd, name, path, url, watcher.Events)
 
 		err = watcher.Add(path)
 		if err != nil {
-			log.Fatal(err)
+			cmd.PrintErr(err)
+			os.Exit(1)
 		}
 		<-done
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(watchCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// watchCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// watchCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	rootCmd.AddCommand(WatchCmd)
 }

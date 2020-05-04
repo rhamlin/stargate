@@ -2,27 +2,12 @@ package upload
 
 import (
 	"errors"
+	"io/ioutil"
 	"net/http"
 	"os"
 
 	"github.com/PuerkitoBio/purell"
 )
-
-func isSuccess(statusCode int) bool {
-	return statusCode == 200
-}
-
-func isFailure(statusCode int) bool {
-	return statusCode != 200
-}
-
-type response struct {
-	Code    string
-	Message string
-	Path    string
-	Status  string
-	Error   []string
-}
 
 // Upload posts the contents of a file to an url
 func Upload(path string, url string) error {
@@ -32,6 +17,9 @@ func Upload(path string, url string) error {
 	}
 
 	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
 	defer file.Close()
 
 	resp, err := http.Post(url, "text/plain", file)
@@ -41,7 +29,11 @@ func Upload(path string, url string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return errors.New("Server error")
+		message, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		return errors.New("Server error:\n\n" + string(message))
 	}
 
 	return nil

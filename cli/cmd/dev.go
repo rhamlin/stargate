@@ -16,25 +16,20 @@ limitations under the License.
 package cmd
 
 import (
-	"errors"
-
 	"github.com/datastax/stargate/cli/pkg/docker"
 
 	"github.com/spf13/cobra"
 )
 
-// ServiceCmd is the parent command for controlling a local stargate instance
-var ServiceCmd = &cobra.Command{
+// devCmd represents the apply command
+var devCmd = &cobra.Command{
 	Short:   "Start a local, dockerized service",
 	Long:    `Start a local, dockerized service`,
-	Use:     "service (start|stop|remove)",
+	Use:     "dev (start|stop|remove)",
 	Example: "stargate service start",
 }
 
-var withCassandra bool
-
-// StopServiceCmd stops a local instance
-var StopServiceCmd = &cobra.Command{
+var stopDevCmd = &cobra.Command{
 	Short:   "Stop a local stargate service",
 	Long:    `Stop a local stargate service`,
 	Use:     "stop",
@@ -62,8 +57,7 @@ var StopServiceCmd = &cobra.Command{
 	},
 }
 
-// RemoveServiceCmd force removes a local instance
-var RemoveServiceCmd = &cobra.Command{
+var removeDevCmd = &cobra.Command{
 	Short:   "Force remove a local stargate service",
 	Long:    `Force remove a local stargate service`,
 	Use:     "remove",
@@ -91,59 +85,49 @@ var RemoveServiceCmd = &cobra.Command{
 	},
 }
 
-// StartServiceCmd starts a local instance
-var StartServiceCmd = &cobra.Command{
+var startDevCmd = &cobra.Command{
 	Short:   "Start a local, dockerized service server",
 	Long:    `Start a local, dockerized service server`,
-	Use:     "start [CASSANDRA_HOST]",
+	Use:     "start [NAME] [PATH]",
 	Example: "stargate service start",
-	Args:    cobra.MaximumNArgs(1),
+	Args:    cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		client, err := docker.NewClient()
 		if err != nil {
 			cmd.PrintErrln(err)
 			return
 		}
-		if withCassandra && len(args) == 1 {
-			cmd.PrintErrln(errors.New("If you are starting with --with-cassandra, you should not specify a cassandra host"))
-			return
-		}
-		cassandraURL := "stargate-cassandra"
-		if len(args) == 1 {
-			cassandraURL = args[0]
-		}
 
-		if withCassandra {
-			err = client.StartCassandra(&docker.StartCassandraOptions{
-				DockerImageHost: "docker.io/library/",
-				ImageName:       "cassandra",
-			})
-			if err != nil {
-				cmd.PrintErrln(err)
-				return
-			}
+		err = client.StartCassandra(&docker.StartCassandraOptions{
+			DockerImageHost: "docker.io/library/",
+			ImageName:       "cassandra",
+		})
+		if err != nil {
+			cmd.PrintErrln(err)
+			return
 		}
 
 		err = client.StartService(&docker.StartServiceOptions{
-			CassandraURL:    cassandraURL,
+			CassandraURL:    "stargate-cassandra",
 			ExposedPorts:    []string{"8080"},
 			DockerImageHost: "docker.io/",
 			ImageName:       "service",
 		})
+
 		if err != nil {
 			cmd.PrintErrln(err)
-		} else {
-			cmd.Println("Success!")
+			return
 		}
+		cmd.Println("Services started!")
+
+		WatchCmd.Run(cmd, append(args, "http://localhost:8080"))
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(ServiceCmd)
+	rootCmd.AddCommand(devCmd)
 
-	ServiceCmd.AddCommand(StopServiceCmd)
-	ServiceCmd.AddCommand(RemoveServiceCmd)
-	ServiceCmd.AddCommand(StartServiceCmd)
-
-	ServiceCmd.PersistentFlags().BoolVarP(&withCassandra, "with-cassandra", "c", false, "withCassandra output")
+	devCmd.AddCommand(stopDevCmd)
+	devCmd.AddCommand(removeDevCmd)
+	devCmd.AddCommand(startDevCmd)
 }
