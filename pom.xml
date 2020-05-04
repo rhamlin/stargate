@@ -32,18 +32,38 @@
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <version>2.4</version>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.2.3</version>
                 <configuration>
-                    <descriptorRefs>
-                        <descriptorRef>jar-with-dependencies</descriptorRef>
-                    </descriptorRefs>
+                    <transformers>
+                        <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                            <resource>reference.conf</resource>
+                        </transformer>
+                        <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                            <resource>application.conf</resource>
+                        </transformer>
+                        <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                            <manifestEntries>
+                                <Main-Class>stargate.Main</Main-Class>
+                                <Can-Redefine-Classes>true</Can-Redefine-Classes>
+                                <Can-Retransform-Classes>true</Can-Retransform-Classes>
+                            </manifestEntries>
+                        </transformer>
+                    </transformers>
+                    <filter>
+                        <artifact>*:*</artifact>
+                        <excludes>
+                            <exclude>META-INF/*.SF</exclude>
+                            <exclude>META-INF/*.DSA</exclude>
+                            <exclude>META-INF/*.RSA</exclude>
+                        </excludes>
+                    </filter>
                 </configuration>
                 <executions>
                     <execution>
                         <phase>package</phase>
                         <goals>
-                            <goal>single</goal>
+                            <goal>shade</goal>
                         </goals>
                     </execution>
                 </executions>
@@ -53,21 +73,21 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>1.6.0</version>
                 <executions>
-                  <execution>
-                    <goals>
-                      <goal>exec</goal>
-                    </goals>
-                  </execution>
+                    <execution>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                    </execution>
                 </executions>
                 <configuration>
-                  <executable>java</executable>
-                  <arguments>
-                    <argument>-cp</argument>
-                    <argument>target/${project.name}-${project.version}-jar-with-dependencies.jar</argument>
-                    <argument>appstax.Main</argument>
-                  </arguments>
+                    <executable>java</executable>
+                    <arguments>
+                        <argument>-cp</argument>
+                        <argument>target/${project.name}-${project.version}-jar-with-dependencies.jar</argument>
+                        <argument>stargate.Main</argument>
+                    </arguments>
                 </configuration>
-              </plugin>
+            </plugin>
             <plugin>
                 <groupId>net.alchim31.maven</groupId>
                 <artifactId>scala-maven-plugin</artifactId>
@@ -90,90 +110,126 @@
                     </execution>
                 </executions>
             </plugin>
-        </plugins>
-    </build>
+            <!--
+                <plugin>
+                <groupId>org.antipathy</groupId>
+                <artifactId>mvn-scalafmt_2.13</artifactId>
+                <version>1.0.3</version>
+                <configuration>
+                <configLocation>${project.basedir}/.scalafmt.conf</configLocation> 
+                <skipTestSources>false</skipTestSources> 
+                <skipSources>false</skipSources> 
+                <respectVersion>true</respectVersion> 
+                <sourceDirectories> 
+                <param>${project.basedir}/src/main/scala</param>
+                </sourceDirectories>
+                <testSourceDirectories>
+                <param>${project.basedir}/src/test/scala</param>
+                </testSourceDirectories>
+                <validateOnly>false</validateOnly> 
+                <onlyChangedFiles>true</onlyChangedFiles> 
+                <branch>master</branch> 
+                <useSpecifiedRepositories>false</useSpecifiedRepositories> 
+                </configuration>
+                <executions>
+                <execution>
+                <phase>validate</phase>
+                <goals>
+                <goal>format</goal>
+                </goals>
+                </execution>
+                </executions>
+                </plugin>
+            -->
+            </plugins>
+        </build>
 
-    <dependencies>
-        <dependency>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-classic</artifactId>
-            <version>1.2.3</version>
-        </dependency>
-        <dependency>
-            <groupId>com.datastax.oss</groupId>
-            <artifactId>java-driver-core</artifactId>
-            <version>${cassandra.client.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.datastax.oss</groupId>
-            <artifactId>java-driver-query-builder</artifactId>
-            <version>${cassandra.client.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.datastax.oss</groupId>
-            <artifactId>java-driver-mapper-runtime</artifactId>
-            <version>${cassandra.client.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.prometheus</groupId>
-            <artifactId>simpleclient</artifactId>
-            <version>${prometheus.simpleclient.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.prometheus</groupId>
-            <artifactId>simpleclient_hotspot</artifactId>
-            <version>${prometheus.simpleclient.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.prometheus</groupId>
-            <artifactId>simpleclient_servlet</artifactId>
-            <version>${prometheus.simpleclient.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.prometheus</groupId>
-            <artifactId>simpleclient_jetty</artifactId>
-            <version>${prometheus.simpleclient.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.prometheus</groupId>
-            <artifactId>simpleclient_logback</artifactId>
-            <version>${prometheus.simpleclient.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.typesafe</groupId>
-            <artifactId>config</artifactId>
-            <version>1.4.0</version>
-        </dependency>
-        <dependency>
-            <groupId>com.typesafe.scala-logging</groupId>
-            <artifactId>scala-logging_2.13</artifactId>
-            <version>3.9.2</version>
-        </dependency>
-        <dependency>
-            <groupId>com.swrve</groupId>
-            <artifactId>rate-limited-logger</artifactId>
-            <version>2.0.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.jetty</groupId>
-            <artifactId>jetty-server</artifactId>
-            <version>9.4.27.v20200227</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.jetty</groupId>
-            <artifactId>jetty-servlet</artifactId>
-            <version>9.4.27.v20200227</version>
-        </dependency>
-        <dependency>
-            <groupId>org.scala-lang</groupId>
-            <artifactId>scala-library</artifactId>
-            <version>2.13.1</version>
-        </dependency>
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.11</version>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
-</project>
+        <dependencies>
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>1.2.3</version>
+            </dependency>
+            <dependency>
+                <groupId>com.datastax.oss</groupId>
+                <artifactId>java-driver-core</artifactId>
+                <version>${cassandra.client.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.datastax.oss</groupId>
+                <artifactId>java-driver-query-builder</artifactId>
+                <version>${cassandra.client.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.datastax.oss</groupId>
+                <artifactId>java-driver-mapper-runtime</artifactId>
+                <version>${cassandra.client.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.prometheus</groupId>
+                <artifactId>simpleclient</artifactId>
+                <version>${prometheus.simpleclient.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.prometheus</groupId>
+                <artifactId>simpleclient_hotspot</artifactId>
+                <version>${prometheus.simpleclient.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.prometheus</groupId>
+                <artifactId>simpleclient_servlet</artifactId>
+                <version>${prometheus.simpleclient.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.prometheus</groupId>
+                <artifactId>simpleclient_jetty</artifactId>
+                <version>${prometheus.simpleclient.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.prometheus</groupId>
+                <artifactId>simpleclient_logback</artifactId>
+                <version>${prometheus.simpleclient.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.typesafe</groupId>
+                <artifactId>config</artifactId>
+                <version>1.4.0</version>
+            </dependency>
+            <dependency>
+                <groupId>com.typesafe.scala-logging</groupId>
+                <artifactId>scala-logging_2.13</artifactId>
+                <version>3.9.2</version>
+            </dependency>
+            <dependency>
+                <groupId>com.swrve</groupId>
+                <artifactId>rate-limited-logger</artifactId>
+                <version>2.0.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-server</artifactId>
+                <version>9.4.27.v20200227</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-servlet</artifactId>
+                <version>9.4.27.v20200227</version>
+            </dependency>
+            <dependency>
+                <groupId>org.scala-lang</groupId>
+                <artifactId>scala-library</artifactId>
+                <version>2.13.1</version>
+            </dependency>
+            <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+                <version>4.11</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.github.scopt</groupId>
+                <artifactId>scopt_2.13</artifactId>
+                <version>3.7.1</version>
+            </dependency>
+        </dependencies>
+    </project>
