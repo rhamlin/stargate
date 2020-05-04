@@ -35,9 +35,7 @@ func (client *Client) StartCassandra(opts *StartCassandraOptions) error {
 		Image: image,
 	}
 
-	hostConfig := container.HostConfig{
-		// PublishAllPorts: true,
-	}
+	hostConfig := container.HostConfig{}
 
 	networkConfig := network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{

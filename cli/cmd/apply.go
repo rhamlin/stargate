@@ -16,7 +16,6 @@ limitations under the License.
 package cmd
 
 import (
-	"log"
 	"os"
 
 	"github.com/PuerkitoBio/purell"
@@ -26,11 +25,7 @@ import (
 )
 
 // Apply sends a schema to server and print output for a user
-func Apply(name string, path string, url string, showDate bool) bool {
-	if !showDate {
-		log.SetPrefix("")
-	}
-
+func Apply(cmd *cobra.Command, name string, path string, url string, showDate bool) bool {
 	if url == "" {
 		url = upload.Host
 	}
@@ -40,11 +35,11 @@ func Apply(name string, path string, url string, showDate bool) bool {
 	errored := err != nil
 
 	if errored {
-		log.Println("Failed to apply schema!")
-		log.Println(err.Error())
+		cmd.PrintErrln("Failed to apply schema!")
+		cmd.PrintErrln(err.Error())
 	} else {
 		endpointURL := purell.MustNormalizeURLString(url+"/"+name, purell.FlagsUnsafeGreedy)
-		log.Println("Endpoint created at", endpointURL)
+		cmd.Println("Endpoint created at", endpointURL)
 	}
 	return !errored
 }
@@ -62,7 +57,7 @@ var applyCmd = &cobra.Command{
 		if len(args) == 3 {
 			url = args[2]
 		}
-		if !Apply(name, path, url, false) {
+		if !Apply(cmd, name, path, url, false) {
 			os.Exit(1)
 		}
 	},
