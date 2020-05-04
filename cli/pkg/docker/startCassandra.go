@@ -17,8 +17,6 @@ func (client *Client) StartCassandra(opts *StartCassandraOptions) error {
 	cli := client.cli
 	ctx := client.ctx
 
-	name := "stargate-" + opts.ImageName
-
 	err := client.EnsureNetwork()
 	if err != nil {
 		return err
@@ -42,6 +40,8 @@ func (client *Client) StartCassandra(opts *StartCassandraOptions) error {
 			"stargate": {NetworkID: "stargate"},
 		},
 	}
+
+	name := "stargate-" + opts.ImageName
 
 	resp, err := cli.ContainerCreate(ctx, &config, &hostConfig, &networkConfig, name)
 	if err != nil {
