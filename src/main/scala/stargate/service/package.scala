@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 
-class AppstaxServlet(val config: ParsedStarGateConfig)
+class StargateServlet(val config: ParsedStarGateConfig)
     extends HttpServlet
     with LazyLogging
     with RequestCollector {
@@ -46,7 +46,7 @@ class AppstaxServlet(val config: ParsedStarGateConfig)
     .every(java.time.Duration.ofSeconds(10))
     .build()
 
-  import AppstaxServlet._
+  import StargateServlet._
 
   def newSession(keyspace: String): CqlSession = {
     val contacts = config.cassandraContactPoints
@@ -255,7 +255,7 @@ class AppstaxServlet(val config: ParsedStarGateConfig)
   }
 }
 
-object AppstaxServlet {
+object StargateServlet {
   val executor: ExecutionContext = ExecutionContext.global
 }
 case class ParsedStarGateConfig(
@@ -345,15 +345,15 @@ object Main {
       case None =>
         sys.exit(0)
     }
-    val config = (if (appConf.isBlank) 
-      ConfigFactory.parseResources("stargate-docker.conf").resolve() 
+    val config = (if (appConf.isBlank)
+      ConfigFactory.parseResources("stargate-docker.conf").resolve()
       else ConfigFactory.parseFile(new File(appConf)).resolve())
     val parsedConfig = mapConfig(config)
     logger.info(s"parsedConfig: ${util.toPrettyJson(parsedConfig)}")
     logger.info(s"contact points ${parsedConfig.getCassandraContactPoints.mkString(",")}")
     val server = new org.eclipse.jetty.server.Server(parsedConfig.httpPort)
     val handler = new ServletHandler()
-    val servlet = new AppstaxServlet(parsedConfig)
+    val servlet = new StargateServlet(parsedConfig)
     handler.addServletWithMapping(new ServletHolder(servlet), "/")
     //expose the MetricsServlet to the /metrics endpoint. To scrape metrics for Prometheus now you just need to point to the appropriate host and port combination
     //ie http://localhost:8080/metrics
