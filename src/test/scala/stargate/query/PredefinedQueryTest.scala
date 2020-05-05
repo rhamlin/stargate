@@ -17,9 +17,9 @@ class PredefinedQueryTest {
   @Test
   def test: Unit = {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("predefined-query-schema.conf"))
-    val model = stargate.schema.outputModel(inputModel)
+    val (session, keyspace) = newSession
+    val model = stargate.schema.outputModel(inputModel, keyspace)
     val executor = ExecutionContext.global
-    val session = newSession
     Await.ready(model.createTables(session, executor), Duration.Inf)
 
     List.range(0, 10).foreach(_ => {

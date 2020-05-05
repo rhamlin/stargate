@@ -47,9 +47,9 @@ class PaginationTest {
   @Test
   def paginationTest: Unit = {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("pagination-schema.conf"))
-    val model = stargate.schema.outputModel(inputModel)
+    val (session, keyspace) = PaginationTest.newSession
+    val model = stargate.schema.outputModel(inputModel, keyspace)
     val executor = ExecutionContext.global
-    val session = PaginationTest.newSession
     Await.ready(model.createTables(session, executor), Duration.Inf)
     paginationTest(model, 5, 3, session, executor)
   }
