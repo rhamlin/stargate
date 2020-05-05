@@ -10,23 +10,26 @@ import (
 )
 
 // Apply sends a schema to server and print output for a user
-func Apply(cmd *cobra.Command, name string, path string, url string, showDate bool) bool {
+func Apply(cmd *cobra.Command, name, path, url string) error {
 	if url == "" {
 		url = upload.Host
 	}
 
-	err := upload.Upload(path, url+"/"+name)
+	return upload.Upload(path, url+"/"+name)
+}
 
-	errored := err != nil
+// ApplyWithLog sends a schema to server and print output for a user
+func ApplyWithLog(cmd *cobra.Command, name, path, url string) error {
+	err := Apply(cmd, name, path, url)
 
-	if errored {
+	if err != nil {
 		cmd.PrintErrln("Failed to apply schema!")
 		cmd.PrintErrln(err.Error())
 	} else {
 		endpointURL := purell.MustNormalizeURLString(url+"/"+name, purell.FlagsUnsafeGreedy)
 		cmd.Println("Endpoint created at", endpointURL)
 	}
-	return !errored
+	return err
 }
 
 // applyCmd represents the apply command
@@ -42,7 +45,9 @@ var applyCmd = &cobra.Command{
 		if len(args) == 3 {
 			url = args[2]
 		}
-		if !Apply(cmd, name, path, url, false) {
+
+		err := ApplyWithLog(cmd, name, path, url)
+		if err != nil {
 			os.Exit(1)
 		}
 	},

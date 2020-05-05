@@ -9,7 +9,7 @@ import (
 )
 
 func applyUpdate(cmd *cobra.Command, name, path, url string, ready chan bool) {
-	Apply(cmd, name, path, url, true)
+	ApplyWithLog(cmd, name, path, url)
 	ready <- true
 }
 
@@ -61,7 +61,7 @@ var WatchCmd = &cobra.Command{
 
 		name, path, url := args[0], args[1], args[2]
 
-		Apply(cmd, name, path, url, true)
+		ApplyWithLog(cmd, name, path, url)
 
 		done := make(chan bool)
 
