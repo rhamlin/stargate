@@ -264,7 +264,8 @@ case class ParsedStarGateConfig(
     @BeanProperty val maxMutationSizeKB: Long,
     @BeanProperty val cassandraContactPoints: List[(String, Int)],
     @BeanProperty val cassandraDataCenter: String,
-    @BeanProperty val cassandraReplication: Int
+    @BeanProperty val cassandraReplication: Int,
+    @BeanProperty val stargateKeyspace: String
 )
 case class Params(conf: String = "")
 
@@ -284,7 +285,8 @@ object Main {
       config.getString("cassandra.contactPoints")
           .split(",").map(_.split(":")).map(hp => (hp(0), Integer.parseInt(hp(1)))).toList,
       config.getString("cassandra.dataCenter"),
-      config.getInt("cassandra.replication")
+      config.getInt("cassandra.replication"),
+      config.getString("stargateKeyspace")
     )
   }
 
