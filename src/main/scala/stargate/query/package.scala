@@ -32,7 +32,7 @@ package object query {
     val bestScore = tableScores.keys.min
     // TODO: cache mapping of conditions to best table in OutputModel
     val bestTable = tableScores(bestScore).head
-    var selection = read.selectStatement(bestTable.name, conditions)
+    var selection = read.selectStatement(bestTable.keyspace, bestTable.name, conditions)
     if(!bestScore.perfect) {
       logger.warn(s"failed to find index for entity '${entityName}' with conditions ${conditions}, best match was: ${bestTable}")
       selection = selection.allowFiltering
@@ -48,7 +48,7 @@ package object query {
       val targetEntityName = model.input.entities(entityName).relations(relationPath.head).targetEntityName
       val relationTable = model.relationTables((entityName, relationPath.head))
       // TODO: possibly use some batching instead of passing one id at a time?
-      val nextIds = ids.flatMap(id => read.relatedSelect(relationTable.name, List(id), session, executor), executor)
+      val nextIds = ids.flatMap(id => read.relatedSelect(relationTable.keyspace, relationTable.name, List(id), session, executor), executor)
       resolveRelations(model, targetEntityName, relationPath.tail, nextIds, session, executor)
     }
   }
