@@ -79,7 +79,7 @@ class StargateServlet(val config: ParsedStarGateConfig)
   def schemaChange(appName: String, req: HttpServletRequest, resp: HttpServletResponse) = {
     req.getMethod match {
       case "POST" => timeSchemaCreate(() => {
-        http.validateFileHeader(req)
+        http.validateHoconHeader(req)
         http.validateSchemaSize(req.getContentLengthLong, maxSchemaSize)
         val input = new String(req.getInputStream.readAllBytes)
         postSchema(appName, input, resp)
