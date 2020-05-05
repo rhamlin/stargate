@@ -71,15 +71,15 @@ object schema {
     scores.groupMap(_._1)(_._2)
   }
 
-  def baseTable(entity: Entity): CassandraTable = {
+  def baseTable(keyspace: String, entity: Entity): CassandraTable = {
     val tableName = baseTableName(entity.name)
     val baseKeyNames = baseTableKey.names.combined.toSet
     val columns = CassandraColumns(baseTableKey, entity.fields.values.filter(f => !baseKeyNames(f.name)).map(_.column).toList)
-    CassandraTable(tableName, columns)
+    CassandraTable(keyspace, tableName, columns)
   }
 
-  def relationTables(entity: Entity): Map[(String,String), CassandraTable] = {
-    def toTable(relation: String) = CassandraTable(relationTableName(entity.name, relation), relationTableColumns)
+  def relationTables(keyspace: String, entity: Entity): Map[(String,String), CassandraTable] = {
+    def toTable(relation: String) = CassandraTable(keyspace, relationTableName(entity.name, relation), relationTableColumns)
     entity.relations.toList.map((name_rel) => ((entity.name, name_rel._1), toTable(name_rel._1))).toMap
   }
 
@@ -121,7 +121,7 @@ object schema {
     }
   }
 
-  def queryTables(model: InputModel, rootEntity: String, conditions: NamedConditions, minPartitions: Long = 1000): Map[String, List[CassandraTable]] = {
+  def queryTables(model: InputModel, keyspace: String, rootEntity: String, conditions: NamedConditions, minPartitions: Long = 1000): Map[String, List[CassandraTable]] = {
     if(conditions.isEmpty) {
       return Map.empty
     }
@@ -133,7 +133,7 @@ object schema {
       def nameToCol(name: String) = CassandraColumn(name, model.fieldColumnType(entityName, name))
       val key = CassandraKey(keyNames.partitionKeys.map(nameToCol), keyNames.clusteringKeys.map(nameToCol))
       val columns = CassandraColumns(key, List.empty)
-      (entityName, CassandraTable(tableName, columns))
+      (entityName, CassandraTable(keyspace, tableName, columns))
     })
     tables.groupMap(_._1)(_._2)
   }
@@ -143,24 +143,24 @@ object schema {
 
 
 
-  def conditionsTables(model: InputModel, minPartitions: Long = 1000): Map[String, List[CassandraTable]] = {
+  def conditionsTables(model: InputModel, keyspace: String, minPartitions: Long = 1000): Map[String, List[CassandraTable]] = {
     mergeMultimaps(model.conditions.toList.map(name_conditionsList => {
       val (entityName, conditionsList) = name_conditionsList
-      mergeMultimaps(conditionsList.map(conditions => queryTables(model, entityName, conditions, minPartitions)))
+      mergeMultimaps(conditionsList.map(conditions => queryTables(model, keyspace, entityName, conditions, minPartitions)))
     }))
   }
 
-  def modelTables(model: InputModel, minPartitions: Long = 1000): (Map[String, List[CassandraTable]], Map[(String,String), CassandraTable]) = {
-    val baseTables = model.entities.view.mapValues(baseTable).mapValues(List(_)).toMap
-    val _relationTables = model.entities.values.flatMap(relationTables).toMap
-    val _queryTables = conditionsTables(model, minPartitions)
+  def modelTables(model: InputModel, keyspace: String, minPartitions: Long = 1000): (Map[String, List[CassandraTable]], Map[(String,String), CassandraTable]) = {
+    val baseTables = model.entities.view.mapValues(baseTable(keyspace, _)).mapValues(List(_)).toMap
+    val _relationTables = model.entities.values.flatMap(relationTables(keyspace, _)).toMap
+    val _queryTables = conditionsTables(model, keyspace, minPartitions)
     // TODO: just doing a minimal dedupe of tables right now; should later determine mininmal set of tables needed for all conditions
     val entityTables = mergeMultimaps(baseTables, _queryTables).view.mapValues(_.toSet.toList).toMap
     (entityTables, _relationTables)
   }
 
-  def outputModel(model: InputModel, minPartitions: Long = 1000): OutputModel = {
-    val (entityTables, relationTables) = modelTables(model, minPartitions)
+  def outputModel(model: InputModel, keyspace: String, minPartitions: Long = 1000): OutputModel = {
+    val (entityTables, relationTables) = modelTables(model, keyspace, minPartitions)
     OutputModel(model, entityTables, relationTables)
   }
 

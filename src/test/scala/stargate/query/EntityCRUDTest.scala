@@ -125,10 +125,9 @@ class EntityCRUDTest {
     })(executor)
   }
 
-  def crudTest(model: OutputModel, mutations: MutationOps): Unit = {
+  def crudTest(model: OutputModel, mutations: MutationOps, session: CqlSession, keyspace: String): Unit = {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
-    val model = stargate.schema.outputModel(inputModel)
-    val session = EntityCRUDTest.newSession
+    val model = stargate.schema.outputModel(inputModel, keyspace)
     implicit val ec: ExecutionContext = EntityCRUDTest.executor
     Await.result(Future.sequence(model.tables.map(t => stargate.cassandra.create(session, t))), Duration.Inf)
     model.input.entities.keys.foreach(entityName => {
@@ -163,15 +162,17 @@ class EntityCRUDTest {
   @Test
   def crudTest: Unit = {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
-    val model = stargate.schema.outputModel(inputModel)
-    crudTest(model, model.mutation)
+    val (session, keyspace) = EntityCRUDTest.newSession
+    val model = stargate.schema.outputModel(inputModel, keyspace)
+    crudTest(model, model.mutation, session, keyspace)
   }
 
   @Test
   def batchedCrudTest: Unit = {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
-    val model = stargate.schema.outputModel(inputModel)
-    crudTest(model, model.batchMutation)
+    val (session, keyspace) = EntityCRUDTest.newSession
+    val model = stargate.schema.outputModel(inputModel, keyspace)
+    crudTest(model, model.batchMutation, session, keyspace)
   }
 }
 
