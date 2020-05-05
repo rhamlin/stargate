@@ -22,7 +22,7 @@ func Upload(path string, url string) error {
 	}
 	defer file.Close()
 
-	resp, err := http.Post(url, "text/plain", file)
+	resp, err := http.Post(url, "application/hocon", file)
 	if err != nil {
 		return err
 	}
