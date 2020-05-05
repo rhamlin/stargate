@@ -36,7 +36,7 @@ func (suite *UploadSuite) SetupSuite() {
 		panic(1)
 	}
 	suite.client = client
-	time.Sleep(15 * time.Second)
+	time.Sleep(20 * time.Second)
 }
 
 func (suite *UploadSuite) TearDownSuite() {
