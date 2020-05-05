@@ -1,23 +1,21 @@
 package stargate.query
 
-import stargate.CassandraTest
-import com.typesafe.config.ConfigFactory
+import stargate.{CassandraTest, CassandraTestSession, cassandra, model}
+import com.typesafe.config.{Config, ConfigFactory}
 import org.junit.{AfterClass, BeforeClass, Test}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import stargate.schema.ENTITY_ID_COLUMN_NAME
-import stargate.cassandra
 
-class ReadWriteTest {
+trait ReadWriteTestTrait extends CassandraTestSession {
 
-  import ReadWriteTest._
-
+  import ReadWriteTestTrait._
 
   @Test
   def testCreateDelete = {
-    val (session, keyspace) = ReadWriteTest.newSession
+    val keyspace = newKeyspace
     val model = stargate.schema.outputModel(inputModel, keyspace)
     Await.ready(model.createTables(session, executor), Duration.Inf)
 
@@ -51,12 +49,10 @@ class ReadWriteTest {
 }
 
 
-object ReadWriteTest extends CassandraTest {
+object ReadWriteTestTrait {
 
-  val modelConfig = ConfigFactory.parseResources("read-write-test-schema.conf")
-  val inputModel = stargate.model.parser.parseModel(modelConfig)
+  val modelConfig: Config = ConfigFactory.parseResources("read-write-test-schema.conf")
+  val inputModel: model.InputModel = stargate.model.parser.parseModel(modelConfig)
   implicit val executor: ExecutionContext = ExecutionContext.global
 
-  @BeforeClass def before = this.ensureCassandraRunning
-  @AfterClass def after = this.cleanup
 }
