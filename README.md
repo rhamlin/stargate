@@ -15,13 +15,22 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0)
 ![build](https://github.com/datastax/stargate/workflows/Docker%20Image%20CI/badge.svg)
 
-Welcome to Stargate the easy query layer for your NoSQL database. Getting started is [here](docs/getting_started.md)
+Welcome to Stargate, the easy query layer for your NoSQL database.
 
-## Why Stargate
+## Getting Started
+* [Getting started in 3 quick steps](docs/getting_started.md)
+* [Build a Todo application database in 5 minutes](docs/getting_started_todo_app.md)
 
-Placeholder
+## Understanding Stargate
+* [Schema Definition](docs/schema_definition.md)
+* [CRUD Operations](docs/crud.md)
+* [Deploy](docs/deploy.md)
 
-## Deployment 
+## Features
+* **Cloud native.** Scale-out and in with workload demand. Be highly available and resilient to failure. Have quick response times across all channels.
+* **It just works.** You give us a logical data model and Stargate gives you a deployable microservice. Stargate handles the database and schema.
+* **CRUD made easy.** Stargate exposes a fully featured CRUD API. Create, update, and delete records in cassandra with ease.
+* **Advanced Cassandra support.** Trust that your database can scale out horizontally to meet increasing workload demand. 
 
 ### Command line utility
 
