@@ -15,7 +15,6 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.jdk.FutureConverters._
 
-
 object cassandra {
 
   case class CassandraKeyNames(partitionKeys: List[String], clusteringKeys: List[String]) {
@@ -83,24 +82,30 @@ object cassandra {
   def createKeyspace(session: CqlSession, name: String, replication: Int): Future[AsyncResultSet] = {
     session.executeAsync(SchemaBuilder.createKeyspace(name).ifNotExists().withSimpleStrategy(replication).build).asScala
   }
-
   def sessionBuilder(contacts: List[(String, Int)], dataCenter: String): CqlSessionBuilder = {
     val builder = contacts.foldLeft(CqlSession.builder)((builder, contact) => builder.addContactPoint(InetSocketAddress.createUnresolved(contact._1, contact._2)))
     builder.withLocalDatacenter(dataCenter)
   }
-  def session(contacts: List[(String, Int)], dataCenter: String): CqlSession = sessionBuilder(contacts, dataCenter).build
-  def session(contacts: List[(String, Int)], dataCenter: String, keyspace: String): CqlSession = sessionBuilder(contacts, dataCenter).withKeyspace(keyspace).build
 
-  def wipeKeyspaceSession(contacts: List[(String, Int)], dataCenter: String, keyspace: String): CqlSession = {
-    val sessionWithoutKeyspace = session(contacts, dataCenter)
-    sessionWithoutKeyspace.execute(SchemaBuilder.dropKeyspace(keyspace).ifExists.build)
-    sessionWithoutKeyspace
+  def session(contacts: List[(String, Int)], dataCenter: String): CqlSession = {
+      sessionBuilder(contacts, dataCenter).build
   }
-  def sessionWithNewKeyspace(contacts: List[(String, Int)], dataCenter: String, keyspace: String, replication: Int): CqlSession = {
-    val recreateSession = wipeKeyspaceSession(contacts, dataCenter, keyspace)
-    recreateSession.execute(SchemaBuilder.createKeyspace(keyspace).withSimpleStrategy(replication).build)
-    recreateSession.close
-    session(contacts, dataCenter, keyspace)
+
+  def withKeyspace(contacts: List[(String, Int)], dataCenter: String, keyspace: String): CqlSession = {
+      sessionBuilder(contacts, dataCenter).withKeyspace(keyspace).build
+  }
+
+  def wipeKeyspaceSession(session: CqlSession, keyspace: String): Unit = {
+    session.execute(SchemaBuilder.dropKeyspace(keyspace).ifExists.build)
+    session.checkSchemaAgreement()
+    ()
+  }
+  def sessionWithNewKeyspace(session: CqlSession, keyspace: String, replication: Int): Unit = {
+    wipeKeyspaceSession(session, keyspace)
+    session.execute(SchemaBuilder.createKeyspace(keyspace).withSimpleStrategy(replication).build)
+    session.checkSchemaAgreement()
+    session.execute("USE " + keyspace)
+    ()
   }
 
 }
