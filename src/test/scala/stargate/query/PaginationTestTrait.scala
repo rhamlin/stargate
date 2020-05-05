@@ -1,6 +1,6 @@
 package stargate.query
 
-import stargate.CassandraTest
+import stargate.{CassandraTest, CassandraTestSession}
 import stargate.model.{OutputModel, parser}
 import com.datastax.oss.driver.api.core.CqlSession
 import com.typesafe.config.ConfigFactory
@@ -10,8 +10,7 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.Try
 
-class PaginationTest {
-
+trait PaginationTestTrait extends CassandraTestSession {
 
   def generate(model: OutputModel, branching: Int, session: CqlSession, executor: ExecutionContext): Future[Unit] = {
     val c = List.range(0, branching).map(_ => Map.empty[String,Object])
@@ -47,16 +46,10 @@ class PaginationTest {
   @Test
   def paginationTest: Unit = {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("pagination-schema.conf"))
-    val (session, keyspace) = PaginationTest.newSession
+    val keyspace = newKeyspace
     val model = stargate.schema.outputModel(inputModel, keyspace)
     val executor = ExecutionContext.global
     Await.ready(model.createTables(session, executor), Duration.Inf)
     paginationTest(model, 5, 3, session, executor)
   }
-}
-
-object PaginationTest extends CassandraTest {
-
-  @BeforeClass def before = this.ensureCassandraRunning
-  @AfterClass def after = this.cleanup
 }

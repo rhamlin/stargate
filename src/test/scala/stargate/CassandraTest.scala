@@ -1,6 +1,6 @@
 package stargate
 import java.util.UUID
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentSkipListSet, TimeUnit}
 
 import com.datastax.oss.driver.api.core.CqlSession
 import com.typesafe.scalalogging.Logger
@@ -9,16 +9,24 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.util.{Random, Try}
 
+trait CassandraTestSession {
+  def session: CqlSession
+  def newKeyspace: String
+}
+
 trait CassandraTest {
   val logger = Logger(classOf[CassandraTest])
 
   // hard-coding this for now
-  val dataCenter = "datacenter1"
-  var contacts = List(("localhost", 9042))
-  val dockerId = "test-dse-" + UUID.randomUUID()
-  val _sessions = new java.util.concurrent.ConcurrentHashMap[UUID, (CqlSession, String)]()
+  val dataCenter: String = "datacenter1"
+  val dockerId: String = "test-dse-" + UUID.randomUUID()
+
+  var contacts: List[(String,Int)] = List(("localhost", 9042))
+  var session: CqlSession = null
+  val keyspaces: ConcurrentSkipListSet[String] = new java.util.concurrent.ConcurrentSkipListSet[String]()
   var alreadyRunning: Boolean = true
 
+  // make this @BeforeClass for any tests that depend on casssandra
   def ensureCassandraRunning(): Unit = {
     val local = Try(cassandra.session(contacts, dataCenter))
     val persistentDseContainer = "test-cassandra"
@@ -43,33 +51,31 @@ trait CassandraTest {
       util.retry(cassandra.session(contacts, dataCenter), Duration.apply(60, TimeUnit.SECONDS), Duration.apply(5, TimeUnit.SECONDS)).get
       alreadyRunning = false
     }
+    session = cassandra.session(contacts, dataCenter)
   }
 
+  // make this @AfterClass for any tests that depend on cassandra
   def cleanup(): Unit = {
-    _sessions.values.asScala.foreach(cleanupSession)
+    keyspaces.asScala.foreach(cleanupKeyspace)
+    session.close()
     if(!alreadyRunning) {
       val stop = util.process.exec(List("docker", "kill", dockerId)).get
       val rm = util.process.exec(List("docker", "rm", dockerId)).get
     }
   }
 
-  def newSession: (CqlSession, String) = {
+
+  def newKeyspace: String = {
     val keyspace = ("keyspace" + Random.alphanumeric.take(10).mkString).toLowerCase
-    logger.info("new cql session for keyspace: {}", keyspace)
-    val session = cassandra.session(contacts, dataCenter)
+    logger.info("creating keyspace: {}", keyspace)
     cassandra.createKeyspace(session, keyspace, 1)
-    _sessions.put(UUID.randomUUID, (session, keyspace))
-    (session, keyspace)
+    keyspaces.add(keyspace)
+    keyspace
   }
 
-  def cleanupSession(session_keyspace: (CqlSession, String)) = {
-    val (session, keyspace) = session_keyspace
-    logger.info(s"cleaning up keyspace ${keyspace} and closing session: ${session.toString}")
-    try {
-      cassandra.wipeKeyspace(session, keyspace)
-    } finally {
-      session.close
-    }
+  def cleanupKeyspace(keyspace: String) = {
+    val wiped = Try(cassandra.wipeKeyspace(session, keyspace))
+    logger.info(s"cleaning up keyspace ${keyspace}: ${wiped.toString}")
     ()
   }
 

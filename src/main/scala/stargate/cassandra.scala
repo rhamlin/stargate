@@ -91,12 +91,12 @@ object cassandra {
   }
 
   def createKeyspace(session: CqlSession, name: String, replication: Int): Unit = {
-    session.execute(SchemaBuilder.createKeyspace(name).ifNotExists().withSimpleStrategy(replication).build.setTimeout(schemaOpTimeout))
+    session.execute(SchemaBuilder.createKeyspace(Strings.doubleQuote(name)).ifNotExists().withSimpleStrategy(replication).build.setTimeout(schemaOpTimeout))
     session.checkSchemaAgreement()
     ()
   }
   def wipeKeyspace(session: CqlSession, keyspace: String): Unit = {
-    session.execute(SchemaBuilder.dropKeyspace(keyspace).ifExists.build.setTimeout(schemaOpTimeout))
+    session.execute(SchemaBuilder.dropKeyspace(Strings.doubleQuote(keyspace)).ifExists.build.setTimeout(schemaOpTimeout))
     session.checkSchemaAgreement()
     ()
   }
