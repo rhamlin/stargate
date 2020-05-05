@@ -38,9 +38,7 @@ func (client *Client) StartService(opts *StartServiceOptions) error {
 		Image:        image,
 		ExposedPorts: nat.PortSet{},
 		Env: []string{
-			"CASSANDRA_HOST=" + opts.CassandraURL,
-			"CASSANDRA_PORT=9042",
-			"CASSANDRA_DC=datacenter1",
+			`SG_CASS_CONTACT_POINTS=` + opts.CassandraURL + `:9042`,
 		},
 	}
 
