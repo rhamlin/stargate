@@ -33,4 +33,14 @@ Run the following:
     mvn compile test
     mvn run:exec #with DSE or Apache Cassandra running in the background
 
-If all this is working satisfactory you are ready to develop new features for Stargate
+If all this is working satisfactory you are ready to develop new features for Stargate.
+
+### Debugging
+
+Changing the `appstax` logger from `INFO` to `TRACE` will give a per request headers and output, not appropriate to run very long in production but should be fine in a dev context.
+See the following example:
+
+    <logger name="appstax" level="info" additivity="false">
+to
+
+    <logger name="appstax" level="trace" additivity="false">

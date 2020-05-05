@@ -18,6 +18,7 @@ trait CassandraTest {
   val dockerId = "test-dse-" + UUID.randomUUID()
   val _sessions = new java.util.concurrent.ConcurrentHashMap[UUID, CqlSession]()
   var alreadyRunning: Boolean = true
+  var dockerLaunched: Boolean = false
 
   def ensureCassandraRunning(): Unit = {
     val local = Try(cassandra.session(contacts, dataCenter))
@@ -30,8 +31,7 @@ trait CassandraTest {
     } else if(localDocker.isSuccess) {
       logger.info("using already running docker-cassandra instance for test: {}", localDocker.get)
       contacts = List(("localhost", localDocker.get))
-      alreadyRunning = true
-    } else {
+      alreadyRunning = true } else {
       val image = "cassandra:3.11.6"
       val start = util.process.exec(List("docker", "run", "--name", dockerId, "-d", "-P", image)).get
       logger.warn(s"""starting cassandra docker container for test: ${dockerId})
@@ -41,6 +41,7 @@ trait CassandraTest {
       val port =  Integer.parseInt(util.process.exec(List("docker", "port", dockerId, "9042")).get.split(":")(1).trim)
       contacts = List(("localhost", port))
       util.retry(cassandra.session(contacts, dataCenter), Duration.apply(60, TimeUnit.SECONDS), Duration.apply(5, TimeUnit.SECONDS)).get
+      dockerLaunched = true
       alreadyRunning = false
     }
   }
@@ -62,6 +63,9 @@ trait CassandraTest {
   }
   def cleanupSession(session: CqlSession) = {
     logger.info(s"cleaning up keyspace ${session.getKeyspace.toString} and closing session: ${session.toString}")
+    if(dockerLaunched){
+      util.process.exec(List("docker", "kill", "test-cassandra"))
+    }
     val tempSession = cassandra.wipeKeyspaceSession(contacts, dataCenter, session.getKeyspace.get.toString)
     tempSession.close
     session.close
