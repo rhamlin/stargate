@@ -33,7 +33,7 @@ func Upload(path string, url string) error {
 		if err != nil {
 			return err
 		}
-		return errors.New("Server error:\n\n" + string(message))
+		return errors.New("Error:\n" + string(message))
 	}
 
 	return nil
