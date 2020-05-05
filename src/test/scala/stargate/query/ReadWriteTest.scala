@@ -17,7 +17,8 @@ class ReadWriteTest {
 
   @Test
   def testCreateDelete = {
-    val session = ReadWriteTest.newSession
+    val (session, keyspace) = ReadWriteTest.newSession
+    val model = stargate.schema.outputModel(inputModel, keyspace)
     Await.ready(model.createTables(session, executor), Duration.Inf)
 
     List.range(0, 100).foreach(_ => {
@@ -30,7 +31,7 @@ class ReadWriteTest {
         Await.result(Future.sequence(future), Duration.Inf)
         tables.foreach(table => {
           val conditions = stargate.query.write.tableConditionsForEntity(table, payload).map(_.get)
-          val select = stargate.query.read.selectStatement(table.name, conditions).build
+          val select = stargate.query.read.selectStatement(table.keyspace, table.name, conditions).build
           val rs = session.execute(select)
           assert(rs.iterator.asScala.toList.length == 1)
         })
@@ -39,7 +40,7 @@ class ReadWriteTest {
         Await.result(Future.sequence(deleted), Duration.Inf)
         tables.foreach(table => {
           val conditions = stargate.query.write.tableConditionsForEntity(table, payload).map(_.get)
-          val select = stargate.query.read.selectStatement(table.name, conditions).build
+          val select = stargate.query.read.selectStatement(table.keyspace, table.name, conditions).build
           val rs = session.execute(select)
           assert(rs.iterator.asScala.toList.isEmpty)
         })
@@ -54,7 +55,6 @@ object ReadWriteTest extends CassandraTest {
 
   val modelConfig = ConfigFactory.parseResources("read-write-test-schema.conf")
   val inputModel = stargate.model.parser.parseModel(modelConfig)
-  val model = stargate.schema.outputModel(inputModel)
   implicit val executor: ExecutionContext = ExecutionContext.global
 
   @BeforeClass def before = this.ensureCassandraRunning

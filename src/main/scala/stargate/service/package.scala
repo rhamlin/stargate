@@ -3,8 +3,10 @@ package stargate
 import java.io.File
 import java.util.UUID
 import java.util.concurrent._
+import java.util.concurrent.locks.{ReadWriteLock, ReentrantReadWriteLock}
 
 import com.datastax.oss.driver.api.core.CqlSession
+import com.datastax.oss.driver.api.core.cql.ResultSet
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.swrve.ratelimitedlogger.RateLimitedLog
 import com.typesafe.config.{Config, ConfigFactory}
@@ -29,7 +31,7 @@ class StargateServlet(val config: ParsedStarGateConfig)
     with LazyLogging
     with RequestCollector {
 
-  val apps = new ConcurrentHashMap[String, (CqlSession, OutputModel)]()
+  val apps = new ConcurrentHashMap[String, OutputModel]()
   val continuationCache =
     new ConcurrentHashMap[UUID, (StreamEntry, ScheduledFuture[Unit])]()
   val continuationCleaner: ScheduledExecutorService =
@@ -47,33 +49,17 @@ class StargateServlet(val config: ParsedStarGateConfig)
     .build()
 
   import StargateServlet._
-
-  def newSession(keyspace: String): CqlSession = {
-    val contacts = config.cassandraContactPoints
-    val dataCenter = config.cassandraDataCenter
-    val replication = config.cassandraReplication
-    cassandra.sessionWithNewKeyspace(
-      contacts,
-      dataCenter,
-      keyspace,
-      replication
-    )
-  }
+  val cqlSession: CqlSession = cassandra.session(config.cassandraContactPoints, config.cassandraDataCenter)
 
   def postSchema(
       appName: String,
       input: String,
       resp: HttpServletResponse
   ): Unit = {
-    val model =
-      stargate.schema.outputModel(stargate.model.parser.parseModel(input))
-    val session = newSession(appName)
-    implicit val ec: ExecutionContext = executor
-    Await.ready(
-      Future.sequence(model.tables.map(cassandra.create(session, _))),
-      Duration.Inf
-    )
-    apps.put(appName, (session, model))
+    val model = stargate.schema.outputModel(stargate.model.parser.parseModel(input), appName)
+    cassandra.recreateKeyspace(cqlSession, appName, config.cassandraReplication)
+    Await.result(model.createTables(cqlSession, executor), Duration.Inf)
+    apps.put(appName, model)
     resp.getWriter.write(model.toString)
   }
 
@@ -83,11 +69,11 @@ class StargateServlet(val config: ParsedStarGateConfig)
       input: String,
       resp: HttpServletResponse
   ): Unit = {
-    val (session, model) = apps.get(appName)
+    val model = apps.get(appName)
     val payloadMap = util.fromJson(input).asInstanceOf[Map[String, Object]]
     val query = model.input.queries(queryName)
     val runtimePayload = queries.predefined.transform(query, payloadMap)
-    val result = stargate.query.getAndTruncate(model, query.entityName, runtimePayload, defaultLimit, defaultTTL, session, executor)
+    val result = stargate.query.getAndTruncate(model, query.entityName, runtimePayload, defaultLimit, defaultTTL, cqlSession, executor)
     val entities = cacheStreams(result)
     resp.getWriter.write(util.toJson(Await.result(entities, Duration.Inf)))
   }
@@ -119,7 +105,7 @@ class StargateServlet(val config: ParsedStarGateConfig)
       continueId: UUID,
       resp: HttpServletResponse
   ): Unit = {
-    val (session, model) = apps.get(appName)
+    val model = apps.get(appName)
     val (entry, cleanup) = continuationCache.remove(continueId)
     cleanup.cancel(false)
 
@@ -155,20 +141,18 @@ class StargateServlet(val config: ParsedStarGateConfig)
       payload: Object,
       resp: HttpServletResponse
   ): Unit = {
-    val (session, model) = apps.get(appName)
+    val model = apps.get(appName)
     val payloadMap = Try(payload.asInstanceOf[Map[String, Object]])
     logger.trace(s"query payload: $payload")
 
     val result: Future[Object] = op match {
       case "GET" => {
-        val result = query.untyped.getAndTruncate(model, entity, payloadMap.get, defaultLimit, defaultTTL, session, executor)
+        val result = query.untyped.getAndTruncate(model, entity, payloadMap.get, defaultLimit, defaultTTL, cqlSession, executor)
         cacheStreams(result)
       }
-      case "POST" => model.mutation.create(entity, payload, session, executor)
-      case "PUT" =>
-        model.mutation.update(entity, payloadMap.get, session, executor)
-      case "DELETE" =>
-        model.mutation.delete(entity, payloadMap.get, session, executor)
+      case "POST" => model.mutation.create(entity, payload, cqlSession, executor)
+      case "PUT" =>  model.mutation.update(entity, payloadMap.get, cqlSession, executor)
+      case "DELETE" => model.mutation.delete(entity, payloadMap.get, cqlSession, executor)
       case _ => Future.failed(new RuntimeException(s"unsupported op: ${op}"))
     }
     logger.trace(op, Await.result(result, Duration.Inf))
