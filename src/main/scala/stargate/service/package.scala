@@ -272,6 +272,11 @@ class StargateServlet(val config: ParsedStarGateConfig)
           val input = new String(req.getInputStream.readAllBytes)
           val payload = util.fromJson(input)
           runQuery(appName, entity, op, payload, resp)
+        case s"/validate" =>
+          http.validateHoconHeader(req)
+          http.validateSchemaSize(contentLength, maxSchemaSize)
+          val input = new String(req.getInputStream.readAllBytes)
+          resp.getWriter.write(util.toJson(stargate.model.parser.parseModel(input)))
         case s"/${appName}" =>
           schemaChange(appName, req, resp)
         case _ =>
