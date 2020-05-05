@@ -284,12 +284,8 @@ object Main {
       config.getLong("validation.maxSchemaSizeKB"),
       config.getLong("validation.maxMutationSizeKB"),
       config.getLong("validation.maxRequestSizeKB"),
-      om.readValue(config.getString("cassandra.contactPoints"), classOf[Object])
-        .asInstanceOf[java.util.ArrayList[java.util.LinkedHashMap[String, Object]]]
-        .asScala
-        .map((f: java.util.LinkedHashMap[String, Object]) => (f.get("host").toString, f.get("port").asInstanceOf[Int]))
-        .toList
-        ,
+      config.getString("cassandra.contactPoints")
+          .split(",").map(_.split(":")).map(hp => (hp(0), Integer.parseInt(hp(1)))).toList,
       config.getString("cassandra.dataCenter"),
       config.getInt("cassandra.replication")
     )
