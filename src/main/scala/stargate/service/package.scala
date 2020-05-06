@@ -96,7 +96,7 @@ class StargateServlet(val config: ParsedStarGateConfig)
       cassandra.recreateKeyspace(cqlSession, appName, config.cassandraReplication)
       Await.result(model.createTables(cqlSession, executor), Duration.Inf)
     } else {
-      logger.info(s"""reusing existing keyspace "${appName}" for latest datamodel""")
+      logger.info(s"""reusing existing keyspace "${appName}" with latest datamodel""")
     }
     apps.put(appName, model)
     resp.getWriter.write(model.toString)
