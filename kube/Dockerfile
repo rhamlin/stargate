@@ -8,12 +8,11 @@
 #   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
+FROM openjdk:11-jdk-slim
 
-FROM centos:centos8.1.1911
+COPY ./target ./stargate
+WORKDIR ./stargate
 
-COPY "./stargate-clone" "/stargate"
-WORKDIR "/stargate"
+RUN cp ./classes/logback-prod.xml ./classes/logback.xml
 
-RUN dnf install -y nc java-11 && dnf clean all && cp ./target/classes/logback-prod.xml ./target/classes/logback.xml
-
-CMD ["java", "-jar", "target/stargate-1.0-SNAPSHOT.jar"]
+CMD ["java", "-jar", "./stargate-1.0-SNAPSHOT.jar"]

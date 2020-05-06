@@ -25,9 +25,22 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Run cassandra
+      run: docker run -d -P --name test-cassandra cassandra:3.11.6
     - name: Set up JDK 1.11
       uses: actions/setup-java@v1
       with:
         java-version: 11
-    - name: Build the Docker image
-      run: ./kube/build-docker.sh 
+    - name: build
+      run: mvn package
+    - name: stop cassandra
+      run: docker kill test-cassandra && docker rm test-cassandra
+    - name: build and push docker
+      uses: docker/build-push-action@v1
+      with:
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+        registry: docker.pkg.github.com
+        repository: datastax/stargate/stargate
+        dockerfile: kube/Dockerfile
+        tag_with_ref: true
