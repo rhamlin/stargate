@@ -16,10 +16,11 @@
 
 package stargate
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{Executors, TimeUnit}
 
 import com.fasterxml.jackson.databind.{ObjectMapper, SerializationFeature}
 
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -66,4 +67,7 @@ package object util {
     }
   }
 
+  def await[T](f: Future[T]): Try[T] = Try(Await.result(f, Duration.Inf))
+
+  def newCachedExecutor: ExecutionContext = ExecutionContext.fromExecutor(Executors.newCachedThreadPool)
 }
