@@ -62,14 +62,13 @@ class StargateServlet(val config: ParsedStarGateConfig)
 
   import StargateServlet._
   val cqlSession: CqlSession = cassandra.session(config.cassandraContactPoints, config.cassandraDataCenter)
-  cassandra.createKeyspace(cqlSession, config.stargateKeyspace, config.cassandraReplication)
-  val datamodelRepoTable: CassandraTable = Await.result(datamodelRepository.ensureRepoTableExists(config.stargateKeyspace, cqlSession, executor), Duration.Inf)
-  Await.result(datamodelRepository.fetchLatestDatamodels(datamodelRepoTable, cqlSession, executor), Duration.Inf).foreach(name_config => {
+  val datamodelRepoTable: CassandraTable = util.await(datamodelRepository.ensureRepoTableExists(config.stargateKeyspace, config.cassandraReplication, cqlSession, executor)).get
+  // reload previous datamodels
+  Await.result(datamodelRepository.fetchAllLatestDatamodels(datamodelRepoTable, cqlSession, executor), Duration.Inf).foreach(name_config => {
     logger.info(s"reloading datamodel from cassandra: ${name_config._1}")
     val model = stargate.schema.outputModel(stargate.model.parser.parseModel(name_config._2), name_config._1)
     apps.put(name_config._1, model)
   })
-
 
   def schemaChange(appName: String, req: HttpServletRequest, resp: HttpServletResponse) = {
     req.getMethod match {
@@ -90,15 +89,22 @@ class StargateServlet(val config: ParsedStarGateConfig)
       resp: HttpServletResponse
   ): Unit = {
     val model = stargate.schema.outputModel(stargate.model.parser.parseModel(input), appName)
-    cassandra.recreateKeyspace(cqlSession, appName, config.cassandraReplication)
-    datamodelRepository.updateDatamodel(appName, input, datamodelRepoTable, cqlSession, executor)
-    Await.result(model.createTables(cqlSession, executor), Duration.Inf)
+    val previousDatamodel = util.await(datamodelRepository.fetchLatestDatamodel(appName, datamodelRepoTable, cqlSession, executor)).get
+    if(!previousDatamodel.contains(input)) {
+      logger.info(s"""creating keyspace "${appName}" for new datamodel""")
+      datamodelRepository.updateDatamodel(appName, input, datamodelRepoTable, cqlSession, executor)
+      cassandra.recreateKeyspace(cqlSession, appName, config.cassandraReplication)
+      Await.result(model.createTables(cqlSession, executor), Duration.Inf)
+    } else {
+      logger.info(s"""reusing existing keyspace "${appName}" for latest datamodel""")
+    }
     apps.put(appName, model)
     resp.getWriter.write(model.toString)
   }
   def deleteSchema(appName: String, resp: HttpServletResponse): Unit = {
+    logger.info(s"""deleting datamodels and keyspace for app "${appName}" """)
     val removed = apps.remove(appName)
-    Await.result(datamodelRepository.deleteDatamodel(appName, datamodelRepoTable, cqlSession, executor), Duration.Inf)
+    util.await(datamodelRepository.deleteDatamodel(appName, datamodelRepoTable, cqlSession, executor)).get
     cassandra.wipeKeyspace(cqlSession, appName)
     if(removed == null) {
       resp.setStatus(404)
