@@ -65,7 +65,7 @@ func (suite *DockerSuite) TestEnsureImageBadHost() {
 }
 
 func (suite *DockerSuite) TestEnsureImageBadImage() {
-	_, err := suite.client.EnsureImage("docker.io/library/", "steve-donnelly-is-a-dingus")
+	_, err := suite.client.EnsureImage("docker.io/library/", "not_a-real_image-name_stargate-Test")
 	assert.NotNil(suite.T(), err)
 }
 func (suite *DockerSuite) TestEnsureImageNoImage() {
