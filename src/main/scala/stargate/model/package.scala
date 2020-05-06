@@ -102,7 +102,7 @@ package object model {
 
     def createTables(session: CqlSession, executor: ExecutionContext): Future[Unit] = {
       implicit val ec: ExecutionContext = executor
-      Future.sequence(this.tables.map(cassandra.create(session, _))).map(_ => ())
+      Future.sequence(this.tables.map(cassandra.createTable(session, _))).map(_ => ())
     }
 
     def get(entityName: String, payload: Map[String, Object], session: CqlSession, executor: ExecutionContext): AsyncList[Map[String, Object]] =

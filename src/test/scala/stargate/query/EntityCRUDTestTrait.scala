@@ -145,7 +145,7 @@ trait EntityCRUDTestTrait extends CassandraTestSession {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
     val model = stargate.schema.outputModel(inputModel, keyspace)
     implicit val ec: ExecutionContext = EntityCRUDTestTrait.executor
-    Await.result(Future.sequence(model.tables.map(t => stargate.cassandra.create(session, t))), Duration.Inf)
+    Await.result(Future.sequence(model.tables.map(t => stargate.cassandra.createTable(session, t))), Duration.Inf)
     model.input.entities.keys.foreach(entityName => {
       List.range(0, 20).foreach(_ => {
         val created = Await.result(createEntityWithIds(model, mutations, entityName, session, executor), Duration.Inf)

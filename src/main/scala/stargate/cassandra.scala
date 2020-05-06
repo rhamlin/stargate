@@ -20,7 +20,7 @@ import java.net.InetSocketAddress
 import java.util.concurrent.CompletionStage
 
 import com.datastax.oss.driver.api.core.`type`.DataType
-import com.datastax.oss.driver.api.core.cql.{AsyncResultSet, ResultSet, Row, Statement}
+import com.datastax.oss.driver.api.core.cql.{AsyncResultSet, ResultSet, Row, SimpleStatement, Statement}
 import com.datastax.oss.driver.api.core.{CqlSession, CqlSessionBuilder}
 import com.datastax.oss.driver.api.querybuilder.SchemaBuilder
 import com.datastax.oss.driver.api.querybuilder.schema.CreateTable
@@ -89,12 +89,16 @@ object cassandra {
     queryAsync(cqlSession, statement, executor).toList(executor).map(_ => ())(executor)
   }
 
-  def create(session: CqlSession, table: CassandraTable): Future[AsyncResultSet] = {
+  def createTableStatement(table: CassandraTable): SimpleStatement = {
     val base = SchemaBuilder.createTable(Strings.doubleQuote(table.keyspace), Strings.doubleQuote(table.name)).ifNotExists().asInstanceOf[CreateTable]
     val partitionKeys = table.columns.key.partitionKeys.foldLeft(base)((builder, next) => builder.withPartitionKey(Strings.doubleQuote(next.name), next.`type`))
     val clusteringKeys = table.columns.key.clusteringKeys.foldLeft(partitionKeys)((builder, next) => builder.withClusteringColumn(Strings.doubleQuote(next.name), next.`type`))
     val dataCols = table.columns.data.foldLeft(clusteringKeys)((builder, next) => builder.withColumn(Strings.doubleQuote(next.name), next.`type`))
-    session.executeAsync(dataCols.build.setTimeout(schemaOpTimeout)).asScala
+    dataCols.build.setTimeout(schemaOpTimeout)
+  }
+
+  def createTable(session: CqlSession, table: CassandraTable): Future[AsyncResultSet] = {
+    session.executeAsync(createTableStatement(table)).asScala
   }
 
   def sessionBuilder(contacts: List[(String, Int)], dataCenter: String): CqlSessionBuilder = {
