@@ -28,10 +28,11 @@ import com.typesafe.scalalogging.{LazyLogging, Logger}
 import io.prometheus.client.exporter.MetricsServlet
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.servlet.{ServletHandler, ServletHolder}
+import stargate.cassandra.CassandraTable
 import stargate.metrics.RequestCollector
 import stargate.model.{OutputModel, queries}
 import stargate.query.pagination.{StreamEntry, Streams}
-import stargate.service.http
+import stargate.service.{datamodelRepository, http}
 
 import scala.beans.BeanProperty
 import scala.concurrent.duration.Duration
@@ -50,8 +51,6 @@ class StargateServlet(val config: ParsedStarGateConfig)
   val continuationCleaner: ScheduledExecutorService =
     Executors.newScheduledThreadPool(1)
 
-  val defaultLimit: Int = config.defaultLimit
-  val defaultTTL: Int = config.defaultTTL
   val maxSchemaSize: Long = config.maxSchemaSizeKB * 1024
   val maxMutationSize: Long = config.maxMutationSizeKB * 1024
   val maxRequestSize: Long = config.maxRequestSizeKB * 1024
@@ -63,6 +62,27 @@ class StargateServlet(val config: ParsedStarGateConfig)
 
   import StargateServlet._
   val cqlSession: CqlSession = cassandra.session(config.cassandraContactPoints, config.cassandraDataCenter)
+  cassandra.createKeyspace(cqlSession, config.stargateKeyspace, config.cassandraReplication)
+  val datamodelRepoTable: CassandraTable = Await.result(datamodelRepository.ensureRepoTableExists(config.stargateKeyspace, cqlSession, executor), Duration.Inf)
+  Await.result(datamodelRepository.fetchLatestDatamodels(datamodelRepoTable, cqlSession, executor), Duration.Inf).foreach(name_config => {
+    logger.info(s"reloading datamodel from cassandra: ${name_config._1}")
+    val model = stargate.schema.outputModel(stargate.model.parser.parseModel(name_config._2), name_config._1)
+    apps.put(name_config._1, model)
+  })
+
+
+  def schemaChange(appName: String, req: HttpServletRequest, resp: HttpServletResponse) = {
+    req.getMethod match {
+      case "POST" => timeSchemaCreate(() => {
+        http.validateFileHeader(req)
+        http.validateSchemaSize(req.getContentLengthLong, maxSchemaSize)
+        val input = new String(req.getInputStream.readAllBytes)
+        postSchema(appName, input, resp)
+      })
+      case "DELETE" => deleteSchema(appName, resp)
+      case op => Future.failed(new RuntimeException(s"unsupported op: ${op}"))
+    }
+  }
 
   def postSchema(
       appName: String,
@@ -71,10 +91,20 @@ class StargateServlet(val config: ParsedStarGateConfig)
   ): Unit = {
     val model = stargate.schema.outputModel(stargate.model.parser.parseModel(input), appName)
     cassandra.recreateKeyspace(cqlSession, appName, config.cassandraReplication)
+    datamodelRepository.updateDatamodel(appName, input, datamodelRepoTable, cqlSession, executor)
     Await.result(model.createTables(cqlSession, executor), Duration.Inf)
     apps.put(appName, model)
     resp.getWriter.write(model.toString)
   }
+  def deleteSchema(appName: String, resp: HttpServletResponse): Unit = {
+    val removed = apps.remove(appName)
+    Await.result(datamodelRepository.deleteDatamodel(appName, datamodelRepoTable, cqlSession, executor), Duration.Inf)
+    cassandra.wipeKeyspace(cqlSession, appName)
+    if(removed == null) {
+      resp.setStatus(404)
+    }
+  }
+
 
   def runPredefinedQuery(
       appName: String,
@@ -86,7 +116,7 @@ class StargateServlet(val config: ParsedStarGateConfig)
     val payloadMap = util.fromJson(input).asInstanceOf[Map[String, Object]]
     val query = model.input.queries(queryName)
     val runtimePayload = queries.predefined.transform(query, payloadMap)
-    val result = stargate.query.getAndTruncate(model, query.entityName, runtimePayload, defaultLimit, defaultTTL, cqlSession, executor)
+    val result = stargate.query.getAndTruncate(model, query.entityName, runtimePayload, config.defaultLimit, config.defaultTTL, cqlSession, executor)
     val entities = cacheStreams(result)
     resp.getWriter.write(util.toJson(Await.result(entities, Duration.Inf)))
   }
@@ -128,8 +158,8 @@ class StargateServlet(val config: ParsedStarGateConfig)
       entry.getRequest,
       entry.entities,
       continueId,
-      defaultLimit,
-      defaultTTL,
+      config.defaultLimit,
+      config.defaultTTL,
       executor
     )
     val entities = Await.result(cacheStreams(truncateFuture), Duration.Inf)
@@ -160,7 +190,7 @@ class StargateServlet(val config: ParsedStarGateConfig)
 
     val result: Future[Object] = op match {
       case "GET" => {
-        val result = query.untyped.getAndTruncate(model, entity, payloadMap.get, defaultLimit, defaultTTL, cqlSession, executor)
+        val result = query.untyped.getAndTruncate(model, entity, payloadMap.get, config.defaultLimit, config.defaultTTL, cqlSession, executor)
         cacheStreams(result)
       }
       case "POST" => model.mutation.create(entity, payload, cqlSession, executor)
@@ -229,12 +259,7 @@ class StargateServlet(val config: ParsedStarGateConfig)
           val payload = util.fromJson(input)
           runQuery(appName, entity, op, payload, resp)
         case s"/${appName}" =>
-          timeSchemaCreate(() => {
-            http.validateFileHeader(req)
-            http.validateSchemaSize(contentLength, maxSchemaSize)
-            val input = new String(req.getInputStream.readAllBytes)
-            postSchema(appName, input, resp)
-          })
+          schemaChange(appName, req, resp)
         case _ =>
           countError()
           resp.setStatus(HttpServletResponse.SC_NOT_FOUND)
