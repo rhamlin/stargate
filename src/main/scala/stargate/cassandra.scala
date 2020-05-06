@@ -20,7 +20,7 @@ import java.net.InetSocketAddress
 import java.util.concurrent.CompletionStage
 
 import com.datastax.oss.driver.api.core.`type`.DataType
-import com.datastax.oss.driver.api.core.cql.{AsyncResultSet, ResultSet, Row, SimpleStatement, Statement}
+import com.datastax.oss.driver.api.core.cql.{AsyncResultSet, Row, SimpleStatement, Statement}
 import com.datastax.oss.driver.api.core.{CqlSession, CqlSessionBuilder}
 import com.datastax.oss.driver.api.querybuilder.SchemaBuilder
 import com.datastax.oss.driver.api.querybuilder.schema.CreateTable
@@ -97,9 +97,10 @@ object cassandra {
     dataCols.build.setTimeout(schemaOpTimeout)
   }
 
-  def createTable(session: CqlSession, table: CassandraTable): Future[AsyncResultSet] = {
+  def createTableAsync(session: CqlSession, table: CassandraTable): Future[AsyncResultSet] = {
     session.executeAsync(createTableStatement(table)).asScala
   }
+  def createTable(session: CqlSession, table: CassandraTable): AsyncResultSet = util.await(createTableAsync(session, table)).get
 
   def sessionBuilder(contacts: List[(String, Int)], dataCenter: String): CqlSessionBuilder = {
     val builder = contacts.foldLeft(CqlSession.builder)((builder, contact) => builder.addContactPoint(InetSocketAddress.createUnresolved(contact._1, contact._2)))
@@ -110,19 +111,22 @@ object cassandra {
       sessionBuilder(contacts, dataCenter).build
   }
 
-  def createKeyspace(session: CqlSession, name: String, replication: Int): Unit = {
-    session.execute(SchemaBuilder.createKeyspace(Strings.doubleQuote(name)).ifNotExists().withSimpleStrategy(replication).build.setTimeout(schemaOpTimeout))
-    session.checkSchemaAgreement()
-    ()
+  def createKeyspaceAsync(session: CqlSession, name: String, replication: Int, executor: ExecutionContext): Future[Unit] = {
+    val create = session.executeAsync(SchemaBuilder.createKeyspace(Strings.doubleQuote(name)).ifNotExists().withSimpleStrategy(replication).build.setTimeout(schemaOpTimeout)).asScala
+    val agreement = create.flatMap(_ => session.checkSchemaAgreementAsync().asScala)(executor)
+    agreement.map(require(_, s"failed to reach schema agreement after creating keyspace: ${name}"))(executor)
   }
-  def wipeKeyspace(session: CqlSession, keyspace: String): Unit = {
-    session.execute(SchemaBuilder.dropKeyspace(Strings.doubleQuote(keyspace)).ifExists.build.setTimeout(schemaOpTimeout))
-    session.checkSchemaAgreement()
-    ()
-  }
-  def recreateKeyspace(session: CqlSession, keyspace: String, replication: Int): Unit = {
-    wipeKeyspace(session, keyspace)
-    createKeyspace(session, keyspace, replication)
-  }
+  def createKeyspace(session: CqlSession, name: String, replication: Int): Unit = util.await(createKeyspaceAsync(session, name, replication, util.newCachedExecutor)).get
 
+  def wipeKeyspaceAsync(session: CqlSession, keyspace: String, executor: ExecutionContext): Future[Unit] = {
+    val delete = session.executeAsync(SchemaBuilder.dropKeyspace(Strings.doubleQuote(keyspace)).ifExists().build.setTimeout(schemaOpTimeout)).asScala
+    val agreement = delete.flatMap(_ => session.checkSchemaAgreementAsync().asScala)(executor)
+    agreement.map(require(_, s"failed to reach schema agreement after deleting keyspace: ${keyspace}"))(executor)
+  }
+  def wipeKeyspace(session: CqlSession, keyspace: String): Unit = util.await(wipeKeyspaceAsync(session, keyspace, util.newCachedExecutor)).get
+
+  def recreateKeyspaceAsync(session: CqlSession, keyspace: String, replication: Int, executor: ExecutionContext): Future[Unit] = {
+    wipeKeyspaceAsync(session, keyspace, executor).flatMap(_ => createKeyspaceAsync(session, keyspace, replication, executor))(executor)
+  }
+  def recreateKeyspace(session: CqlSession, keyspace: String, replication: Int): Unit = util.await(recreateKeyspaceAsync(session, keyspace, replication, util.newCachedExecutor)).get
 }
