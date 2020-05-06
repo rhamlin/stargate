@@ -17,8 +17,8 @@ import com.datastax.oss.driver.internal.core.util.Strings
 // functions used to implement appstax mutations
 object write {
 
-  def insertStatement(tableName: String, columns: Map[String, Object]): Insert = {
-    val base = QueryBuilder.insertInto(Strings.doubleQuote(tableName)).asInstanceOf[RegularInsert]
+  def insertStatement(keyspace: String, tableName: String, columns: Map[String, Object]): Insert = {
+    val base = QueryBuilder.insertInto(Strings.doubleQuote(keyspace), Strings.doubleQuote(tableName)).asInstanceOf[RegularInsert]
     columns.foldLeft(base)((builder, col) => builder.value(Strings.doubleQuote(col._1), QueryBuilder.literal(col._2)))
   }
 
@@ -26,25 +26,25 @@ object write {
     val keySet = table.columns.key.names.combined.toSet
     if(keySet.forall(col => (columns.get(col).orNull) != null)) {
       val columnSet = table.columns.data.map(_.name) ++ keySet
-      Some(insertStatement(table.name, columns.filter(kv => columnSet.contains(kv._1))))
+      Some(insertStatement(table.keyspace, table.name, columns.filter(kv => columnSet.contains(kv._1))))
     } else {
       None
     }
   }
 
-  def deleteStatement(tableName: String, conditions: List[ScalarCondition[Term]]): Delete = {
-    val base = QueryBuilder.deleteFrom(Strings.doubleQuote(tableName)).where()
+  def deleteStatement(keyspace: String, tableName: String, conditions: List[ScalarCondition[Term]]): Delete = {
+    val base = QueryBuilder.deleteFrom(Strings.doubleQuote(keyspace), Strings.doubleQuote(tableName)).where()
     conditions.foldLeft(base)(read.appendWhere)
   }
 
-  def deleteStatement(tableName: String, conditions: Map[String,Object]): Delete = {
-    deleteStatement(tableName, conditions.toList.map(key_val => ScalarCondition[Term](key_val._1, ScalarComparison.EQ, QueryBuilder.literal(key_val._2))))
+  def deleteStatement(keyspace: String, tableName: String, conditions: Map[String,Object]): Delete = {
+    deleteStatement(keyspace, tableName, conditions.toList.map(key_val => ScalarCondition[Term](key_val._1, ScalarComparison.EQ, QueryBuilder.literal(key_val._2))))
   }
 
   def deleteStatement(table: CassandraTable, columns: Map[String, Object]): Option[Delete] = {
     val keySet = table.columns.key.names.combined.toSet
     if(keySet.forall(col => (columns.get(col).orNull) != null)) {
-      Some(deleteStatement(table.name, columns.view.filterKeys(keySet.contains).toMap))
+      Some(deleteStatement(table.keyspace, table.name, columns.view.filterKeys(keySet.contains).toMap))
     } else {
       None
     }
@@ -91,22 +91,24 @@ object write {
     updateStatements.flatten
   }
 
-  def createDirectedRelationStatement(tableName: String, from: UUID, to: UUID): SimpleStatement = {
-    QueryBuilder.insertInto(Strings.doubleQuote(tableName)).value(Strings.doubleQuote(schema.RELATION_FROM_COLUMN_NAME), QueryBuilder.literal(from)).value(Strings.doubleQuote(schema.RELATION_TO_COLUMN_NAME), QueryBuilder.literal(to)).build
+  def createDirectedRelationStatement(keyspace: String, tableName: String, from: UUID, to: UUID): SimpleStatement = {
+    QueryBuilder.insertInto(Strings.doubleQuote(keyspace), Strings.doubleQuote(tableName))
+      .value(Strings.doubleQuote(schema.RELATION_FROM_COLUMN_NAME), QueryBuilder.literal(from))
+      .value(Strings.doubleQuote(schema.RELATION_TO_COLUMN_NAME), QueryBuilder.literal(to)).build
   }
-  def deleteDirectedRelationStatement(tableName: String, from: UUID, to: UUID): SimpleStatement = {
-    QueryBuilder.deleteFrom(Strings.doubleQuote(tableName))
+  def deleteDirectedRelationStatement(keyspace: String, tableName: String, from: UUID, to: UUID): SimpleStatement = {
+    QueryBuilder.deleteFrom(Strings.doubleQuote(keyspace), Strings.doubleQuote(tableName))
       .whereColumn(Strings.doubleQuote(schema.RELATION_FROM_COLUMN_NAME)).isEqualTo(QueryBuilder.literal(from))
       .whereColumn(Strings.doubleQuote(schema.RELATION_TO_COLUMN_NAME)).isEqualTo(QueryBuilder.literal(to)).build
   }
 
-  def updateBidirectionalRelation(statement: (String,UUID,UUID) => SimpleStatement, model: OutputModel, fromEntity: String, fromRelationName: String): (UUID,UUID)=>List[SimpleStatement] = {
+  def updateBidirectionalRelation(statement: (String, String,UUID,UUID) => SimpleStatement, model: OutputModel, fromEntity: String, fromRelationName: String): (UUID,UUID)=>List[SimpleStatement] = {
     val fromRelation =  model.input.entities(fromEntity).relations(fromRelationName)
     val toEntity = fromRelation.targetEntityName
     val toRelationName = fromRelation.inverseName
     val fromTable = model.relationTables((fromEntity, fromRelationName))
     val toTable = model.relationTables((toEntity, toRelationName))
-    (fromId: UUID, toId: UUID) => List(statement(fromTable.name, fromId, toId), statement(toTable.name, toId, fromId))
+    (fromId: UUID, toId: UUID) => List(statement(fromTable.keyspace, fromTable.name, fromId, toId), statement(toTable.keyspace, toTable.name, toId, fromId))
   }
   def createBidirectionalRelation(model: OutputModel, fromEntity: String, fromRelationName: String): (UUID,UUID)=>List[SimpleStatement] = {
     updateBidirectionalRelation(createDirectedRelationStatement, model, fromEntity, fromRelationName)

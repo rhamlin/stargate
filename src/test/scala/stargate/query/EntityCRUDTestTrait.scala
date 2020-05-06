@@ -2,7 +2,7 @@ package stargate.query
 
 import java.util.UUID
 
-import stargate.{CassandraTest, query}
+import stargate.{CassandraTest, CassandraTestSession, query}
 import stargate.model.{InputModel, MutationOps, OutputModel, RelationField, parser}
 import stargate.schema.ENTITY_ID_COLUMN_NAME
 import com.datastax.oss.driver.api.core.CqlSession
@@ -15,10 +15,10 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Random, Try}
 
 
-class EntityCRUDTest {
+trait EntityCRUDTestTrait extends CassandraTestSession {
 
-  import EntityCRUDTest._
-  implicit val executor: ExecutionContext = EntityCRUDTest.executor
+  import EntityCRUDTestTrait._
+  implicit val executor: ExecutionContext = EntityCRUDTestTrait.executor
 
   // checks that two entity trees are the same, ignoring missing or empty-list relations
   def diff(expected: Map[String,Object], queried: Map[String,Object]): Unit = {
@@ -125,11 +125,10 @@ class EntityCRUDTest {
     })(executor)
   }
 
-  def crudTest(model: OutputModel, mutations: MutationOps): Unit = {
+  def crudTest(model: OutputModel, mutations: MutationOps, session: CqlSession, keyspace: String): Unit = {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
-    val model = stargate.schema.outputModel(inputModel)
-    val session = EntityCRUDTest.newSession
-    implicit val ec: ExecutionContext = EntityCRUDTest.executor
+    val model = stargate.schema.outputModel(inputModel, keyspace)
+    implicit val ec: ExecutionContext = EntityCRUDTestTrait.executor
     Await.result(Future.sequence(model.tables.map(t => stargate.cassandra.create(session, t))), Duration.Inf)
     model.input.entities.keys.foreach(entityName => {
       List.range(0, 20).foreach(_ => {
@@ -163,22 +162,24 @@ class EntityCRUDTest {
   @Test
   def crudTest: Unit = {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
-    val model = stargate.schema.outputModel(inputModel)
-    crudTest(model, model.mutation)
+    val keyspace = newKeyspace
+    val model = stargate.schema.outputModel(inputModel, keyspace)
+    crudTest(model, model.mutation, session, keyspace)
   }
 
   @Test
   def batchedCrudTest: Unit = {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
-    val model = stargate.schema.outputModel(inputModel)
-    crudTest(model, model.batchMutation)
+    val keyspace = newKeyspace
+    val model = stargate.schema.outputModel(inputModel, keyspace)
+    crudTest(model, model.batchMutation, session, keyspace)
   }
 }
 
 
 
 
-object EntityCRUDTest extends CassandraTest {
+object EntityCRUDTestTrait {
 
   implicit val executor: ExecutionContext = ExecutionContext.global
 
@@ -234,7 +235,4 @@ object EntityCRUDTest extends CassandraTest {
     query.untyped.getAndTruncate(model, entityName, request, 1000, session, executor)
   }
 
-
-  @BeforeClass def before = this.ensureCassandraRunning
-  @AfterClass def after = this.cleanup
 }

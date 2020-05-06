@@ -77,10 +77,12 @@ package object model {
 
   case class OutputModel(
     input: InputModel,
-    entityTables: Map[String,List[CassandraTable]],
+    entityTables: Map[String, List[CassandraTable]],
     relationTables: Map[(String,String), CassandraTable]) {
 
+    val baseTables: Map[String, CassandraTable] = entityTables.map(et => (et._1, et._2.find(t => t.name == schema.baseTableName(et._1)).get))
     def tables: List[CassandraTable] = (entityTables.values.flatten ++ relationTables.values).toList
+
 
     def createTables(session: CqlSession, executor: ExecutionContext): Future[Unit] = {
       implicit val ec: ExecutionContext = executor

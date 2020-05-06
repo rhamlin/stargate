@@ -37,27 +37,28 @@ object read {
     }
   }
 
-  def selectStatement(tableName: String, columns: SelectFrom=>Select, conditions: List[ScalarCondition[Term]]): Select = {
-    val select = QueryBuilder.selectFrom(Strings.doubleQuote(tableName))
+  def selectStatement(keyspace: String, tableName: String, columns: SelectFrom=>Select, conditions: List[ScalarCondition[Term]]): Select = {
+    val select = QueryBuilder.selectFrom(Strings.doubleQuote(keyspace), Strings.doubleQuote(tableName))
     val selectColumns = columns(select)
     conditions.foldLeft(selectColumns.where())(appendWhere)
   }
-  def selectStatement(tableName: String, conditions: List[ScalarCondition[Term]]): Select = selectStatement(tableName, _.all(), conditions)
-  def selectStatement(tableName: String, columns: List[String], conditions: List[ScalarCondition[Term]]): Select = {
-    selectStatement(tableName, selectFrom => columns.foldLeft(selectFrom.columns(List.empty[String].asJava))((select, col) => select.column(Strings.doubleQuote(col))), conditions)
+  def selectStatement(keyspace: String, tableName: String, conditions: List[ScalarCondition[Term]]): Select = selectStatement(keyspace, tableName, _.all(), conditions)
+  def selectStatement(keyspace: String, tableName: String, columns: List[String], conditions: List[ScalarCondition[Term]]): Select = {
+    selectStatement(keyspace, tableName, selectFrom => columns.foldLeft(selectFrom.columns(List.empty[String].asJava))((select, col) => select.column(Strings.doubleQuote(col))), conditions)
   }
-  def selectStatement(tableName: String, maybeColumns: Option[List[String]], conditions: List[ScalarCondition[Term]]): Select = {
-    maybeColumns.map(selectStatement(tableName, _, conditions)).getOrElse(selectStatement(tableName, conditions))
+  def selectStatement(keyspace: String, tableName: String, maybeColumns: Option[List[String]], conditions: List[ScalarCondition[Term]]): Select = {
+    maybeColumns.map(selectStatement(keyspace, tableName, _, conditions)).getOrElse(selectStatement(keyspace, tableName, conditions))
   }
 
-  def relatedSelect(relationTable: String, fromIds: List[UUID], session: CqlSession,  executor: ExecutionContext): AsyncList[UUID] = {
+  def relatedSelect(keyspace: String, relationTable: String, fromIds: List[UUID], session: CqlSession,  executor: ExecutionContext): AsyncList[UUID] = {
     val conditions = List(ScalarCondition[Term](schema.RELATION_FROM_COLUMN_NAME, ScalarComparison.IN, ListTerm(fromIds.map(QueryBuilder.literal))))
-    val rows = cassandra.queryAsync(session, selectStatement(relationTable, conditions).build, executor)
+    val rows = cassandra.queryAsync(session, selectStatement(keyspace, relationTable, conditions).build, executor)
     rows.map(_.getUuid(schema.RELATION_TO_COLUMN_NAME), executor)
   }
 
   def entityIdToObject(model: OutputModel, entityName: String, maybeColumns: Option[List[String]], id: UUID, session: CqlSession, executor: ExecutionContext): Future[Option[Map[String,Object]]] = {
-    val select = selectStatement(schema.baseTableName(entityName), maybeColumns, List(ScalarCondition(schema.ENTITY_ID_COLUMN_NAME, ScalarComparison.EQ, QueryBuilder.literal(id))))
+    val baseTable = model.baseTables(entityName)
+    val select = selectStatement(baseTable.keyspace, baseTable.name, maybeColumns, List(ScalarCondition(schema.ENTITY_ID_COLUMN_NAME, ScalarComparison.EQ, QueryBuilder.literal(id))))
     cassandra.queryAsync(session, select.build, executor).maybeHead(executor).map(_.map(cassandra.rowToMap))(executor)
   }
   def entityIdToObject(model: OutputModel, entityName: String, id: UUID, session: CqlSession, executor: ExecutionContext): Future[Option[Map[String, Object]]] = {

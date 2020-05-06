@@ -1,6 +1,6 @@
 package stargate.query
 
-import stargate.CassandraTest
+import stargate.{CassandraTest, CassandraTestSession}
 import stargate.model.{parser, queries}
 import com.typesafe.config.ConfigFactory
 import org.junit.{AfterClass, BeforeClass, Test}
@@ -9,21 +9,18 @@ import org.junit.Assert._
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
 
-class PredefinedQueryTest {
-
-  import PredefinedQueryTest._
-
+trait PredefinedQueryTestTrait extends CassandraTestSession {
 
   @Test
   def test: Unit = {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("predefined-query-schema.conf"))
-    val model = stargate.schema.outputModel(inputModel)
+    val keyspace = newKeyspace
+    val model = stargate.schema.outputModel(inputModel, keyspace)
     val executor = ExecutionContext.global
-    val session = newSession
     Await.ready(model.createTables(session, executor), Duration.Inf)
 
     List.range(0, 10).foreach(_ => {
-      val entity = EntityCRUDTest.createEntityWithIds(model, model.mutation, "A", session, executor)
+      val entity = EntityCRUDTestTrait.createEntityWithIds(model, model.mutation, "A", session, executor)
       Await.result(entity, Duration.Inf)
     })
     val req = queries.predefined.transform(model.input.queries("getAandB"),  Map((stargate.keywords.mutation.MATCH, Map.empty)))
@@ -35,11 +32,4 @@ class PredefinedQueryTest {
       })
     })
   }
-}
-
-
-object PredefinedQueryTest extends CassandraTest {
-
-  @BeforeClass def before = this.ensureCassandraRunning
-  @AfterClass def after = this.cleanup
 }

@@ -4,7 +4,7 @@ import java.net.InetSocketAddress
 import java.util.concurrent.CompletionStage
 
 import com.datastax.oss.driver.api.core.`type`.DataType
-import com.datastax.oss.driver.api.core.cql.{AsyncResultSet, Row, Statement}
+import com.datastax.oss.driver.api.core.cql.{AsyncResultSet, ResultSet, Row, Statement}
 import com.datastax.oss.driver.api.core.{CqlSession, CqlSessionBuilder}
 import com.datastax.oss.driver.api.querybuilder.SchemaBuilder
 import com.datastax.oss.driver.api.querybuilder.schema.CreateTable
@@ -15,8 +15,9 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.jdk.FutureConverters._
 
-
 object cassandra {
+
+  val schemaOpTimeout: java.time.Duration = java.time.Duration.ofSeconds(10)
 
   case class CassandraKeyNames(partitionKeys: List[String], clusteringKeys: List[String]) {
     def combined: List[String] = (partitionKeys ++ clusteringKeys)
@@ -34,12 +35,12 @@ object cassandra {
     def names: CassandraColumnNames = CassandraColumnNames(key.names, data.map(_.name))
     def combined: List[CassandraColumn] = key.combined ++ data
   }
-  case class CassandraTable(name: String, columns: CassandraColumns)
+  case class CassandraTable(keyspace: String, name: String, columns: CassandraColumns)
 
-  case class KeyConditionScore(partition: Int, clustering: Int, skipped: Int) extends Ordered[KeyConditionScore] {
-    def perfect: Boolean = (partition + clustering + skipped) == 0
-    def tuple: (Int, Int, Int) = (partition, clustering, skipped)
-    override def compare(that: KeyConditionScore): Int = Ordering[(Int,Int,Int)].compare(this.tuple, that.tuple)
+  case class KeyConditionScore(missingColumns: Int, partition: Int, clustering: Int, skipped: Int) extends Ordered[KeyConditionScore] {
+    def perfect: Boolean = (missingColumns + partition + clustering + skipped) == 0
+    def tuple: (Int, Int, Int, Int) = (missingColumns, partition, clustering, skipped)
+    override def compare(that: KeyConditionScore): Int = Ordering[(Int,Int,Int,Int)].compare(this.tuple, that.tuple)
   }
 
   type PagedResults[T] = AsyncList[T]
@@ -73,34 +74,35 @@ object cassandra {
   }
 
   def create(session: CqlSession, table: CassandraTable): Future[AsyncResultSet] = {
-    val base = SchemaBuilder.createTable(Strings.doubleQuote(table.name)).ifNotExists().asInstanceOf[CreateTable]
+    val base = SchemaBuilder.createTable(Strings.doubleQuote(table.keyspace), Strings.doubleQuote(table.name)).ifNotExists().asInstanceOf[CreateTable]
     val partitionKeys = table.columns.key.partitionKeys.foldLeft(base)((builder, next) => builder.withPartitionKey(Strings.doubleQuote(next.name), next.`type`))
     val clusteringKeys = table.columns.key.clusteringKeys.foldLeft(partitionKeys)((builder, next) => builder.withClusteringColumn(Strings.doubleQuote(next.name), next.`type`))
     val dataCols = table.columns.data.foldLeft(clusteringKeys)((builder, next) => builder.withColumn(Strings.doubleQuote(next.name), next.`type`))
-    session.executeAsync(dataCols.build).asScala
-  }
-
-  def createKeyspace(session: CqlSession, name: String, replication: Int): Future[AsyncResultSet] = {
-    session.executeAsync(SchemaBuilder.createKeyspace(name).ifNotExists().withSimpleStrategy(replication).build).asScala
+    session.executeAsync(dataCols.build.setTimeout(schemaOpTimeout)).asScala
   }
 
   def sessionBuilder(contacts: List[(String, Int)], dataCenter: String): CqlSessionBuilder = {
     val builder = contacts.foldLeft(CqlSession.builder)((builder, contact) => builder.addContactPoint(InetSocketAddress.createUnresolved(contact._1, contact._2)))
     builder.withLocalDatacenter(dataCenter)
   }
-  def session(contacts: List[(String, Int)], dataCenter: String): CqlSession = sessionBuilder(contacts, dataCenter).build
-  def session(contacts: List[(String, Int)], dataCenter: String, keyspace: String): CqlSession = sessionBuilder(contacts, dataCenter).withKeyspace(keyspace).build
 
-  def wipeKeyspaceSession(contacts: List[(String, Int)], dataCenter: String, keyspace: String): CqlSession = {
-    val sessionWithoutKeyspace = session(contacts, dataCenter)
-    sessionWithoutKeyspace.execute(SchemaBuilder.dropKeyspace(keyspace).ifExists.build)
-    sessionWithoutKeyspace
+  def session(contacts: List[(String, Int)], dataCenter: String): CqlSession = {
+      sessionBuilder(contacts, dataCenter).build
   }
-  def sessionWithNewKeyspace(contacts: List[(String, Int)], dataCenter: String, keyspace: String, replication: Int): CqlSession = {
-    val recreateSession = wipeKeyspaceSession(contacts, dataCenter, keyspace)
-    recreateSession.execute(SchemaBuilder.createKeyspace(keyspace).withSimpleStrategy(replication).build)
-    recreateSession.close
-    session(contacts, dataCenter, keyspace)
+
+  def createKeyspace(session: CqlSession, name: String, replication: Int): Unit = {
+    session.execute(SchemaBuilder.createKeyspace(Strings.doubleQuote(name)).ifNotExists().withSimpleStrategy(replication).build.setTimeout(schemaOpTimeout))
+    session.checkSchemaAgreement()
+    ()
+  }
+  def wipeKeyspace(session: CqlSession, keyspace: String): Unit = {
+    session.execute(SchemaBuilder.dropKeyspace(Strings.doubleQuote(keyspace)).ifExists.build.setTimeout(schemaOpTimeout))
+    session.checkSchemaAgreement()
+    ()
+  }
+  def recreateKeyspace(session: CqlSession, keyspace: String, replication: Int): Unit = {
+    wipeKeyspace(session, keyspace)
+    createKeyspace(session, keyspace, replication)
   }
 
 }
