@@ -19,7 +19,7 @@ package stargate.query
 import com.typesafe.config.{Config, ConfigFactory}
 import org.junit.Test
 import stargate.schema.ENTITY_ID_COLUMN_NAME
-import stargate.{CassandraTestSession, cassandra, model}
+import stargate.{CassandraTestSession, cassandra, model, util}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -33,7 +33,7 @@ trait ReadWriteTestTrait extends CassandraTestSession {
   def testCreateDelete = {
     val keyspace = newKeyspace
     val model = stargate.schema.outputModel(inputModel, keyspace)
-    Await.ready(model.createTables(session, executor), Duration.Inf)
+    util.await(model.createTables(session, executor)).get
 
     List.range(0, 100).foreach(_ => {
       model.input.entities.values.foreach(entity => {

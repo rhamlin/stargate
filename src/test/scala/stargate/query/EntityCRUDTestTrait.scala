@@ -29,6 +29,7 @@ import stargate.{CassandraTestSession, query}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.Random
+import stargate.util
 
 
 trait EntityCRUDTestTrait extends CassandraTestSession {
@@ -145,7 +146,7 @@ trait EntityCRUDTestTrait extends CassandraTestSession {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
     val model = stargate.schema.outputModel(inputModel, keyspace)
     implicit val ec: ExecutionContext = EntityCRUDTestTrait.executor
-    Await.result(Future.sequence(model.tables.map(t => stargate.cassandra.createTable(session, t))), Duration.Inf)
+    util.await(model.createTables(session, executor)).get
     model.input.entities.keys.foreach(entityName => {
       List.range(0, 20).foreach(_ => {
         val created = Await.result(createEntityWithIds(model, mutations, entityName, session, executor), Duration.Inf)

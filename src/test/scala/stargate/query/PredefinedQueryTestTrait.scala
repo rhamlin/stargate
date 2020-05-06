@@ -19,7 +19,7 @@ package stargate.query
 import com.typesafe.config.ConfigFactory
 import org.junit.Assert._
 import org.junit.Test
-import stargate.CassandraTestSession
+import stargate.{CassandraTestSession, util}
 import stargate.model.{parser, queries}
 
 import scala.concurrent.duration.Duration
@@ -33,7 +33,7 @@ trait PredefinedQueryTestTrait extends CassandraTestSession {
     val keyspace = newKeyspace
     val model = stargate.schema.outputModel(inputModel, keyspace)
     val executor = ExecutionContext.global
-    Await.ready(model.createTables(session, executor), Duration.Inf)
+    util.await(model.createTables(session, executor)).get
 
     List.range(0, 10).foreach(_ => {
       val entity = EntityCRUDTestTrait.createEntityWithIds(model, model.mutation, "A", session, executor)

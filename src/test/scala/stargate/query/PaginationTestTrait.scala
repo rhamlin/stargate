@@ -19,8 +19,8 @@ package stargate.query
 import com.datastax.oss.driver.api.core.CqlSession
 import com.typesafe.config.ConfigFactory
 import org.junit.Test
-import stargate.CassandraTestSession
 import stargate.model.{OutputModel, parser}
+import stargate.{CassandraTestSession, util}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -64,7 +64,7 @@ trait PaginationTestTrait extends CassandraTestSession {
     val keyspace = newKeyspace
     val model = stargate.schema.outputModel(inputModel, keyspace)
     val executor = ExecutionContext.global
-    Await.ready(model.createTables(session, executor), Duration.Inf)
+    util.await(model.createTables(session, executor)).get
     paginationTest(model, 5, 3, session, executor)
   }
 }
