@@ -33,22 +33,21 @@ func (client *Client) GetNameWithVersion(image string) (string, error) {
 func (client *Client) EnsureImage(dockerHost, image string) (string, error) {
 	ctx := client.ctx
 	cli := client.cli
-	reader, err := cli.ImagePull(ctx, dockerHost+image, types.ImagePullOptions{})
-	if err != nil {
-		// This block exists because we're currently building the stargate-service image locally and will be removed when the image is available
-		if image != "service" {
-			return "", err
-		}
-		name, err2 := client.GetNameWithVersion("stargate")
-		if err2 != nil {
+
+	// This block exists because we're currently building the stargate-service image locally and will be removed when the image is available
+	if image == "service" {
+		name, err := client.GetNameWithVersion("stargate")
+		if err != nil {
 			return "", err
 		}
 		return name, nil
 	}
-	defer reader.Close()
-	name, err := client.GetNameWithVersion(image)
+
+	reader, err := cli.ImagePull(ctx, dockerHost+image, types.ImagePullOptions{})
 	if err != nil {
 		return "", err
 	}
-	return name, nil
+	defer reader.Close()
+
+	return client.GetNameWithVersion(image)
 }
