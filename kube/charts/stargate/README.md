@@ -22,27 +22,11 @@
 
 * [Install minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/)
 * run `minikube start`
-* [Generate personal GitHub token](https://help.github.com/en/github/authenticating-to-github/creating-a-personal-access-token-for-the-command-line). NOTE: You will need the `read:packages` right at least.
 * run `kubectl create secret docker-registry regcred  --docker-username=YOURDOCKERUSER --docker-password=YOURDOCKERPASS`
 * [Install Helm 3.1+](https://helm.sh/docs/intro/install/)
 * run `helm repo add incubator https://kubernetes-charts-incubator.storage.googleapis.com`
 * run `helm install cassandra incubator/cassandra --set config.cluster_size=1 --set config.seed_size=1`. The Chart is from [here](https://hub.helm.sh/charts/incubator/cassandra)
 * run `helm install mysg kube/charts/stargate --set image.tag=latest --set imagePullSecrets={regcred} --set stargate.cassandraDataCenter=datacenter1`
-* run `kubectl port-forward $(kubectl get pods -l app.kubernetes.io/instance=mysg | grep -v NAME | awk '{print $1}'| head -n1) 8080:80`
-
-You now have access to Stargate on your localhost on port 8080.
-
-## Starting from scratch on your local workstation using github package
-
-* GitHub personal auth token with rights to access datastax/stargate repository login (at least until public)
-* [Install minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/)
-* run `minikube start`
-* [Generate personal GitHub token](https://help.github.com/en/github/authenticating-to-github/creating-a-personal-access-token-for-the-command-line). NOTE: You will need the `read:packages` right at least.
-* run `kubectl create secret docker-registry regcred --docker-server=https://docker.pkg.github.com  --docker-username=YOURGITHUBUSERNAME --docker-password=YOURPERSONALGITHUBTOKEN`
-* [Install Helm 3.1+](https://helm.sh/docs/intro/install/)
-* run `helm repo add incubator https://kubernetes-charts-incubator.storage.googleapis.com`
-* run `helm install cassandra incubator/cassandra --set config.cluster_size=1 --set config.seed_size=1`. The Chart is from [here](https://hub.helm.sh/charts/incubator/cassandra)
-* run `helm install mysg kube/charts/stargate --set image.repository=docker.pkg.github.com/datastax/stargate/stargate --set image.tag=latest --set imagePullSecretes={regcred} --set stargate.cassandraDataCenter=datacenter1`
 * run `kubectl port-forward $(kubectl get pods -l app.kubernetes.io/instance=mysg | grep -v NAME | awk '{print $1}'| head -n1) 8080:80`
 
 You now have access to Stargate on your localhost on port 8080.
