@@ -35,15 +35,6 @@ jobs:
       run: mvn package
     - name: stop cassandra
       run: docker kill test-cassandra && docker rm test-cassandra
-    - name: build and push github package
-      uses: docker/build-push-action@v1
-      with:
-        username: ${{ github.actor }}
-        password: ${{ github.token }}
-        registry: docker.pkg.github.com
-        repository: datastax/stargate/stargate
-        dockerfile: kube/Dockerfile
-        tag_with_ref: true
     - name: build and push docker
       uses: docker/build-push-action@v1
       with:
