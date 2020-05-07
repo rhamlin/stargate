@@ -27,7 +27,7 @@
 * run `helm repo add incubator https://kubernetes-charts-incubator.storage.googleapis.com`
 * run `helm install cassandra incubator/cassandra --set config.cluster_size=1 --set config.seed_size=1`. The Chart is from [here](https://hub.helm.sh/charts/incubator/cassandra)
 * run `helm install mysg kube/charts/stargate --set image.tag=latest --set imagePullSecrets={regcred} --set stargate.cassandraDataCenter=datacenter1`
-* run `kubectl port-forward $(kubectl get pods -l app.kubernetes.io/instance=mysg | grep -v NAME | awk '{print $1}'| head -n1) 8080:80`
+* run `kubectl port-forward $(kubectl get pods -l app.kubernetes.io/instance=mysg -o jsonpath='{.items[0].metadata.name}') 8080:80`
 
 You now have access to Stargate on your localhost on port 8080.
 
