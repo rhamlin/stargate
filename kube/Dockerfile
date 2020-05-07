@@ -15,4 +15,4 @@ WORKDIR ./stargate
 
 RUN cp ./classes/logback-prod.xml ./classes/logback.xml
 
-CMD ["java", "-jar", "./stargate-1.0-SNAPSHOT.jar"]
+CMD ["java", "-jar", "./stargate-0.1.0-SNAPSHOT.jar"]
