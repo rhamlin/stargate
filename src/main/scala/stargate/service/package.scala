@@ -302,7 +302,7 @@ case class Params(conf: String = "")
 
 object Main {
   private val logger = Logger("main")
-  private val sgVersion = "1.0.0"
+  private val sgVersion = "0.1.0"
 
   private def mapConfig(config: Config): ParsedStarGateConfig = {
     val om = new ObjectMapper
