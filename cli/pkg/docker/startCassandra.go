@@ -15,6 +15,8 @@
 package docker
 
 import (
+	"fmt"
+
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -62,5 +64,11 @@ func (client *Client) StartCassandra(opts *StartCassandraOptions) error {
 		return err
 	}
 
-	return cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{})
+	fmt.Println("Starting Cassandra. This might take a minute...")
+	err = cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{})
+	if err != nil {
+		return err
+	}
+
+	return client.Started(resp.ID, "Starting listening for CQL clients")
 }
