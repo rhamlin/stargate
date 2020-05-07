@@ -126,8 +126,8 @@ var StartServiceCmd = &cobra.Command{
 		err = client.StartService(&docker.StartServiceOptions{
 			CassandraURL:    cassandraURL,
 			ExposedPorts:    []string{"8080"},
-			DockerImageHost: "docker.io/",
-			ImageName:       "service",
+			DockerImageHost: "docker.pkg.github.com/datastax/stargate/",
+			ImageName:       "stargate",
 		})
 		if err != nil {
 			cmd.PrintErrln(err)
