@@ -16,13 +16,15 @@
 
 package stargate
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{Callable, CompletableFuture, Executors, ScheduledExecutorService, ScheduledFuture, TimeUnit}
 
 import com.fasterxml.jackson.databind.{ObjectMapper, SerializationFeature}
 
 import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
-import scala.util.Try
+import scala.jdk.FutureConverters._
+import scala.util.{Success, Try}
 
 package object util {
 
@@ -66,4 +68,43 @@ package object util {
     }
   }
 
+  def asScala[T](future: java.util.concurrent.Future[T], backoff: Duration, scheduler: ScheduledExecutorService): Future[T] = {
+    val completableFuture = new CompletableFuture[T]()
+    val check: Object => Runnable = (self: Object) => () => {
+      if(future.isDone) {
+        val tryget = Try(future.get)
+        if(tryget.isSuccess) {
+          completableFuture.complete(tryget.get)
+        } else {
+          completableFuture.completeExceptionally(tryget.failed.get)
+        }
+      } else {
+        val check = self.asInstanceOf[Object => Runnable]
+        scheduler.schedule(check(check), backoff._1, backoff._2)
+      }
+    }
+    check(check).run()
+    completableFuture.asScala
+  }
+  def retry[T](value: ()=>Future[T], remaining: Duration, backoff: Duration, scheduler: ScheduledExecutorService): Future[T] = {
+    val executor = ExecutionContext.fromExecutor(scheduler)
+    val t0 = System.nanoTime()
+    val future: Future[Future[T]] = value().transform(result => {
+      val t1 = System.nanoTime()
+      val nextRemaining = remaining - Duration(t1 - t0, TimeUnit.NANOSECONDS) - backoff
+      if(result.isSuccess || nextRemaining._1 < 0) {
+        Success(Future.fromTry(result))
+      } else {
+        val retryCallable: Callable[Future[T]] = () => retry(value, nextRemaining, backoff, scheduler)
+        val retryFuture: ScheduledFuture[Future[T]] = scheduler.schedule(retryCallable, backoff._1, backoff._2)
+        Success(asScala(retryFuture, Duration.apply(math.max(1, backoff._1/5), backoff._2), scheduler).flatten)
+      }
+    })(executor)
+    future.flatten
+  }
+  def retry[T](value: ()=>Future[T], remaining: Duration, backoff: Duration): Future[T] = retry(value, remaining, backoff, Executors.newScheduledThreadPool(1))
+
+  def await[T](f: Future[T]): Try[T] = Try(Await.result(f, Duration.Inf))
+
+  def newCachedExecutor: ExecutionContext = ExecutionContext.fromExecutor(Executors.newCachedThreadPool)
 }
