@@ -70,6 +70,12 @@ class StargateServlet(val config: ParsedStarGateConfig)
     apps.put(name_config._1, model)
   })
 
+  def lookupModel(appName: String): OutputModel = {
+    val model = this.apps.get(appName)
+    require(model != null, s"invalid database name: ${appName}")
+    model
+  }
+
   def schemaChange(appName: String, req: HttpServletRequest, resp: HttpServletResponse) = {
     req.getMethod match {
       case "POST" => timeSchemaCreate(() => {
@@ -118,11 +124,12 @@ class StargateServlet(val config: ParsedStarGateConfig)
       input: String,
       resp: HttpServletResponse
   ): Unit = {
-    val model = apps.get(appName)
+    val model = lookupModel(appName)
     val payloadMap = util.fromJson(input).asInstanceOf[Map[String, Object]]
-    val query = model.input.queries(queryName)
-    val runtimePayload = queries.predefined.transform(query, payloadMap)
-    val result = stargate.query.getAndTruncate(model, query.entityName, runtimePayload, config.defaultLimit, config.defaultTTL, cqlSession, executor)
+    val query = Try(model.input.queries(queryName))
+    require(query.isSuccess, s"""no such query "${queryName}" for database "${appName}" """)
+    val runtimePayload = queries.predefined.transform(query.get, payloadMap)
+    val result = stargate.query.getAndTruncate(model, query.get.entityName, runtimePayload, config.defaultLimit, config.defaultTTL, cqlSession, executor)
     val entities = cacheStreams(result)
     resp.getWriter.write(util.toJson(Await.result(entities, Duration.Inf)))
   }
@@ -154,8 +161,10 @@ class StargateServlet(val config: ParsedStarGateConfig)
       continueId: UUID,
       resp: HttpServletResponse
   ): Unit = {
-    val model = apps.get(appName)
-    val (entry, cleanup) = continuationCache.remove(continueId)
+    val model = lookupModel(appName)
+    val continue_cleanup = continuationCache.remove(continueId)
+    require(continue_cleanup != null, s"""no continuable query found for id ${continueId} in database "${appName}" """)
+    val (entry, cleanup) = continue_cleanup
     cleanup.cancel(false)
 
     val truncateFuture = stargate.query.pagination.truncate(
@@ -190,7 +199,8 @@ class StargateServlet(val config: ParsedStarGateConfig)
       payload: Object,
       resp: HttpServletResponse
   ): Unit = {
-    val model = apps.get(appName)
+    val model = lookupModel(appName)
+    require(model.input.entities.contains(entity), s"""database "${appName}" does not have an entity named "${entity}" """)
     val payloadMap = Try(payload.asInstanceOf[Map[String, Object]])
     logger.trace(s"query payload: $payload")
 
@@ -249,7 +259,6 @@ class StargateServlet(val config: ParsedStarGateConfig)
       path match {
         case s"/$appName/continue/${id}" =>
           timeRead(() => {
-            http.validateJsonContentHeader(req)
             continueQuery(appName, UUID.fromString(id), resp)
           })
         case s"/${appName}/q/${query}" =>
