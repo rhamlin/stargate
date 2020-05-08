@@ -28,7 +28,7 @@ Prerequisites: You must have **docker** to use stargate locally.
     - <a name="tempworkflow">temporary workflow</a>   
         * `./localstack.sh` from the repo root to start cassandra and stargate docker containers
         * `stargateIp=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' stargate)` to get the ip of the container
-        * `curl "${stargateIp}:8080/test" -H "content-type: multipart/form-data" --data-binary "@./stargate.conf"` to create a db named 'test'
+        * `curl "${stargateIp}:8080/myNamespace" -H "content-type: multipart/form-data" --data-binary "@./stargate.conf"` to create a db named 'myNamespace'
     
 3. Query the database
 
