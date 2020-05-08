@@ -38,7 +38,7 @@ Let’s take a quick look at a portion of the todo configuration file. Here you 
         }
     }
     ```
-   Then update your schema with stargate by running: `curl "${stargateIp}:8080/test" -H "content-type: multipart/form-data" --data-binary "@./todo.conf"`
+   Then update your schema with stargate by running: `curl "${stargateIp}:8080/test" -H "content-type: application/hocon" --data-binary "@./todo.conf"`
    
 2. Create a todo entry
     Stargate has refreshed the database in the background and has created our first endpoint. Out of the box, stargate gives you create, get, update, and delete functionality on each entity. Below is an example of a create statement.
@@ -96,7 +96,7 @@ queryConditions: {
     ]
 }
 ```
-Finally, post your updated schema to stargate with: `curl "${stargateIp}:8080/test" -H "content-type: multipart/form-data" --data-binary "@./todo.conf"`
+Finally, post your updated schema to stargate with: `curl "${stargateIp}:8080/test" -H "content-type: application/hocon" --data-binary "@./todo.conf"`
 
 
 Now we’re ready to create and then query our first Todos by User. 

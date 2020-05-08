@@ -12,6 +12,7 @@ function containerIp {
     docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $1
 }
 function waitForCassandra {
+  echo "waiting for cassandra to start accepting connections..."
   probe=1; while [ $probe -ne 0 ]; do docker exec "$cassandraContainer" cqlsh; probe=$?; sleep 3; done
 }
 
@@ -30,6 +31,7 @@ else
     echo "container $cassandraContainer already running"
 fi
 cassandraIp=$(containerIp "$cassandraContainer")
+echo "cassandra container listening at: $cassandraIp:9042"
 
 status=$(containerStatus "$stargateContainer")
 if [ $status -eq 0 ] || [ $status -eq 2 ]; then
@@ -50,5 +52,5 @@ echo "stargate listening at: $stargateIp:8080"
 sleep 3
 echo
 echo "# posting example schema to namespace 'test' with:"
-echo 'curl "'${stargateIp}':8080/test" -H "content-type: multipart/form-data" --data-binary "@src/main/resources/schema.conf"'
-curl "${stargateIp}:8080/test" -H "content-type: multipart/form-data" --data-binary "@src/main/resources/schema.conf"
+echo 'curl "'${stargateIp}':8080/test" -H "content-type: application/hocon" --data-binary "@src/main/resources/schema.conf"'
+curl "${stargateIp}:8080/test" -H "content-type: application/hocon" --data-binary "@src/main/resources/schema.conf"
