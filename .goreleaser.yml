@@ -33,3 +33,9 @@ changelog:
     exclude:
     - '^docs:'
     - '^test:'
+release:
+  github:
+    owner: datastax
+    name: stargate
+  name_template: "{{.ProjectName}}-v{{.Version}}"
+
