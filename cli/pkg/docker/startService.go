@@ -36,14 +36,14 @@ func (client *Client) StartService(opts *StartServiceOptions) error {
 	cli := client.cli
 	ctx := client.ctx
 
-	name := "stargate-" + opts.ImageName
+	name := "stargate-service"
 
 	err := client.EnsureNetwork()
 	if err != nil {
 		return err
 	}
 
-	client.Remove(opts.ImageName)
+	client.Remove("service")
 
 	image, err := client.EnsureImage(opts.DockerImageHost, opts.ImageName)
 	if err != nil {
