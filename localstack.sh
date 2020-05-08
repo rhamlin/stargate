@@ -33,7 +33,7 @@ cassandraIp=$(containerIp "$cassandraContainer")
 
 status=$(containerStatus "$stargateContainer")
 if [ $status -eq 0 ] || [ $status -eq 2 ]; then
-    docker rm "$stargateContainer"
+    docker rm "$stargateContainer" 2>/dev/null
     echo "starting stargate in docker"
     docker run -d -P --name "$stargateContainer" -e "SG_CASS_CONTACT_POINTS=${cassandraIp}:9042" "datastax/stargate:latest"
     if [ $? -ne 0 ]; then
@@ -48,6 +48,7 @@ echo "stargate listening at: $stargateIp:8080"
 
 
 sleep 3
-echo "posting example schema to namespace 'test'"
+echo
+echo "# posting example schema to namespace 'test' with:"
 echo 'curl "'${stargateIp}':8080/test" -H "content-type: multipart/form-data" --data-binary "@src/main/resources/schema.conf"'
 curl "${stargateIp}:8080/test" -H "content-type: multipart/form-data" --data-binary "@src/main/resources/schema.conf"
