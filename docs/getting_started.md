@@ -22,9 +22,10 @@ Prerequisites: You must have **docker** to use stargate locally.
     ```
 2. Install and Start Stargate
     - <a name="tempworkflow">temporary workflow</a>, we know this is suboptimal   
+        * make sure you are part of the datastax organization on dockerhub and login with: `docker login --username $DOCKER_USERNAME`
         * `./localstack.sh` from the repo root to start cassandra and stargate docker containers
         * `stargateIp=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' stargate)` to get the ip of the container
-        * `curl "${stargateIp}:8080/myNamespace" -H "content-type: multipart/form-data" --data-binary "@./stargate.conf"` to create a db named 'myNamespace'
+        * `curl "${stargateIp}:8080/myNamespace" -H "content-type: application/hocon" --data-binary "@./stargate.conf"` to create a db named 'myNamespace'
     
 3. Query the database
 
