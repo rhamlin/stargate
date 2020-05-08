@@ -24,8 +24,11 @@ import (
 
 // ServiceCmd is the parent command for controlling a local stargate instance
 var ServiceCmd = &cobra.Command{
-	Short:   "Start a local, dockerized service",
-	Long:    `Start a local, dockerized service`,
+	Short: "Start a local, dockerized service",
+	Long: `Start a local, dockerized service
+
+Running 'stargate service -c start' will start both a stargate server and cassandra instance to back it.
+Stopping or removing with the cassandra flag will also stop and remove the local cassandra instance.`,
 	Use:     "service (start|stop|remove)",
 	Example: "stargate service start",
 }
@@ -144,5 +147,5 @@ func init() {
 	ServiceCmd.AddCommand(RemoveServiceCmd)
 	ServiceCmd.AddCommand(StartServiceCmd)
 
-	ServiceCmd.PersistentFlags().BoolVarP(&withCassandra, "with-cassandra", "c", false, "withCassandra output")
+	ServiceCmd.PersistentFlags().BoolVarP(&withCassandra, "with-cassandra", "c", false, "apply the stargate actions to a cassandra container as well")
 }

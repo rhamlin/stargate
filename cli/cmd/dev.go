@@ -22,17 +22,21 @@ import (
 
 // devCmd represents the apply command
 var devCmd = &cobra.Command{
-	Short:   "Start a local, dockerized service",
-	Long:    `Start a local, dockerized service`,
+	Short: "Work with a local Stargate stack",
+	Long: `Control a local Stargate stack (Cassandra, Stargate, filewatchers for an easy local experience)
+
+This is the same as running:
+stargate service start --withCassandra
+stargate watch [FILE]`,
 	Use:     "dev (start|stop|remove)",
-	Example: "stargate service start",
+	Example: "stargate dev start",
 }
 
 var stopDevCmd = &cobra.Command{
-	Short:   "Stop a local stargate service",
-	Long:    `Stop a local stargate service`,
+	Short:   "Stop a local stargate stack",
+	Long:    `Stop a local stargate stack`,
 	Use:     "stop",
-	Example: "stargate service stop",
+	Example: "stargate dev stop",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		client, err := docker.NewClient()
@@ -57,10 +61,10 @@ var stopDevCmd = &cobra.Command{
 }
 
 var removeDevCmd = &cobra.Command{
-	Short:   "Force remove a local stargate service",
-	Long:    `Force remove a local stargate service`,
+	Short:   "Force remove a local stargate stack",
+	Long:    `Force remove a local stargate stack`,
 	Use:     "remove",
-	Example: "stargate service remove",
+	Example: "stargate dev remove",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		client, err := docker.NewClient()
@@ -85,10 +89,10 @@ var removeDevCmd = &cobra.Command{
 }
 
 var startDevCmd = &cobra.Command{
-	Short:   "Start a local, dockerized service server",
-	Long:    `Start a local, dockerized service server`,
+	Short:   "Start a local stargate stack",
+	Long:    `Start a local stargate stack`,
 	Use:     "start [NAME] [PATH]",
-	Example: "stargate service start",
+	Example: "stargate dev start",
 	Args:    cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		client, err := docker.NewClient()
