@@ -105,7 +105,6 @@ class StargateServlet(val config: ParsedStarGateConfig)
       logger.info(s"""reusing existing keyspace "${appName}" with latest datamodel""")
     }
     apps.put(appName, model)
-    resp.getWriter.write(model.toString)
   }
   def deleteSchema(appName: String, resp: HttpServletResponse): Unit = {
     logger.info(s"""deleting datamodels and keyspace for app "${appName}" """)
