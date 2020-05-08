@@ -39,3 +39,5 @@ release:
     name: stargate
   name_template: "{{.ProjectName}}-v{{.Version}}"
 
+dist: bin
+
