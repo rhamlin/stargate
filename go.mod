@@ -3,6 +3,7 @@ module github.com/datastax/stargate
 go 1.14
 
 require (
+	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
