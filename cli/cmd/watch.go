@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"io/ioutil"
 	"log"
 	"os"
 
@@ -75,7 +76,13 @@ var WatchCmd = &cobra.Command{
 
 		name, path, url := args[0], args[1], args[2]
 
-		ApplyWithLog(cmd, name, path, url)
+		_, err = os.Stat(path)
+		if err != nil {
+			emptySchema := []byte("entities {}")
+			ioutil.WriteFile(path, emptySchema, 0644)
+		} else {
+			ApplyWithLog(cmd, name, path, url)
+		}
 
 		done := make(chan bool)
 
