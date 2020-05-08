@@ -57,11 +57,11 @@ object parser {
 
     val fieldsConf = if(config.hasPath(keywords.config.entity.FIELDS)) Try(config.getConfig(keywords.config.entity.FIELDS)) else Success(ConfigFactory.empty)
     require(fieldsConf.isSuccess, s"""|"${keywords.config.entity.FIELDS}" config in entity "${name}": ${fieldsConf.failed.get}""".stripMargin)
-    val fields = parseEntityFields(name, config.getConfig(keywords.config.entity.FIELDS))
+    val fields = parseEntityFields(name, fieldsConf.get)
 
     val relationsConf = if(config.hasPath(keywords.config.entity.RELATIONS)) Try(config.getConfig(keywords.config.entity.RELATIONS)) else Success(ConfigFactory.empty)
     require(relationsConf.isSuccess, s"""|"${keywords.config.entity.RELATIONS}" config in entity "${name}": ${relationsConf.failed.get}""".stripMargin)
-    val relations = parseEntityRelations(name, config.getConfig(keywords.config.entity.RELATIONS))
+    val relations = parseEntityRelations(name, relationsConf.get)
 
     fields.get(schema.ENTITY_ID_COLUMN_NAME).foreach(f => require(f.scalarType == ScalarType.UUID, s"""field ${schema.ENTITY_ID_COLUMN_NAME} in entity "${name}" must be type ${ScalarType.UUID.name}"""))
     val fieldsWithEntityIds = fields.updated(schema.ENTITY_ID_COLUMN_NAME, ScalarField(schema.ENTITY_ID_COLUMN_NAME, ScalarType.UUID))
