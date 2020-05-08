@@ -38,7 +38,7 @@ func (client *Client) StartCassandra(opts *StartCassandraOptions) error {
 		return err
 	}
 
-	client.Remove(opts.ImageName)
+	client.Remove("cassandra")
 
 	image, err := client.EnsureImage(opts.DockerImageHost, opts.ImageName)
 	if err != nil {
@@ -57,7 +57,7 @@ func (client *Client) StartCassandra(opts *StartCassandraOptions) error {
 		},
 	}
 
-	name := "stargate-" + opts.ImageName
+	name := "stargate-cassandra"
 
 	resp, err := cli.ContainerCreate(ctx, &config, &hostConfig, &networkConfig, name)
 	if err != nil {
