@@ -22,11 +22,10 @@ import (
 
 // cassandraCmd represents the apply command
 var cassandraCmd = &cobra.Command{
-	Short:   "Start a local, dockerized cassandra server",
-	Long:    `Start a local, dockerized cassandra server`,
+	Short:   "Work with a local, dockerized Cassandra server",
+	Long:    `Work with a local, dockerized Cassandra server`,
 	Use:     "cassandra (start|stop|remove)",
 	Example: "stargate cassandra start",
-	Args:    cobra.ExactArgs(1),
 }
 
 var stopCassandraCmd = &cobra.Command{

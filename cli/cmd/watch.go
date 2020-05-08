@@ -62,9 +62,11 @@ func fileError(cmd *cobra.Command, done chan bool, Errors chan error) {
 
 // WatchCmd represents the watch command
 var WatchCmd = &cobra.Command{
-	Short:   "Watch a schema file and apply schema to a stargate server",
-	Long:    `Watch a schema file and apply schema to a stargate server`,
-	Use:     "watch [name] [path] [host]",
+	Short: "Watch a schema file and apply schema to a Stargate server",
+	Long: `Watch a schema file and apply schema to a Stargate server
+	
+	if a schema file doesn't exist, an empty one will be created for you`,
+	Use:     "watch name path [host]",
 	Example: "stargate watch todo ./todo.conf http://server.stargate.com:8080",
 	Args:    cobra.MinimumNArgs(3),
 	Run: func(cmd *cobra.Command, args []string) {
