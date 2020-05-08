@@ -37,7 +37,7 @@ release:
   github:
     owner: datastax
     name: stargate
-  name_template: "{{.ProjectName}}-v{{.Version}}"
+  name_template: "{{ .Tag }}"
 
 dist: bin
 
