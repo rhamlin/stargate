@@ -48,10 +48,17 @@ func ApplyWithLog(cmd *cobra.Command, name, path, url string) error {
 
 // applyCmd represents the apply command
 var applyCmd = &cobra.Command{
-	Short:   "Apply schema to a stargate server",
-	Long:    `Apply schema to a stargate server`,
-	Use:     "apply [name] [path] [host]",
-	Example: "stargate apply todo ./todo.conf http://server.stargate.com:8080",
+	Short: "Apply schema to a stargate server",
+	Long: `Apply schema to a stargate server to create or update a database
+	
+Apply takes two required parameters:
+	name: the name of the database you're creating
+	path: the path to schema file
+
+And one optional parameter:
+	host: the host and port of the running Stargate instance, the default being a local instance`,
+	Use:     "apply name path [host]",
+	Example: "stargate apply todo ./todo.conf server.stargate.com:8080",
 	Args:    cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		name, path := args[0], args[1]

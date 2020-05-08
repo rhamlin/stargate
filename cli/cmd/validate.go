@@ -24,7 +24,7 @@ import (
 var validateCmd = &cobra.Command{
 	Short:   "Validate schema",
 	Long:    `Validate schema`,
-	Use:     "validate [path] [host]",
+	Use:     "validate path [host]",
 	Example: "stargate validate ./todo.conf http://server.stargate.com:8080",
 	Args:    cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
