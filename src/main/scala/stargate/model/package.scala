@@ -86,8 +86,15 @@ package object model {
     queries: Map[String, GetQuery],
     conditions: Map[String, List[NamedConditions]]
   ) {
-    // TODO - either remove this, or add support for specifying in config+parser, create default unknown value
-    def cardinality(entity: String, field: String): Long = 1000
+    // TODO - add support for specifying in config+parser
+    def cardinality(entity: String, field: String): Option[Long] = {
+      val scalarType = this.entities(entity).fields(field).scalarType
+      if(scalarType == ScalarType.BOOLEAN) {
+        Some(2)
+      } else {
+        None
+      }
+    }
     def fieldColumnType(entity: String, field: String): DataType = entities(entity).fields(field).scalarType.cassandra
   }
 

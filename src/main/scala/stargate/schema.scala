@@ -20,6 +20,8 @@ import stargate.cassandra._
 import stargate.model._
 import com.datastax.oss.driver.api.core.`type`.DataTypes
 
+import scala.util.Try
+
 object schema {
 
   val ENTITY_ID_COLUMN_NAME = "entityId"
@@ -45,7 +47,7 @@ object schema {
     }
   }
 
-  def conditionsKey(conditions: NamedConditions, cardinality: String=>Long, minPartitionKeys: Long): CassandraKeyNames = {
+  def conditionsKey(conditions: NamedConditions, cardinality: String=>Option[Long], minPartitionKeys: Long): CassandraKeyNames = {
     val sorted = conditions.sortBy(cond => cardinality(cond.field)).reverse
     val (eq, noteq) = sorted.partition(cond => ScalarComparison.isEquality(cond.comparison))
     val noteqSet = noteq.map(_.field).toSet
@@ -55,10 +57,11 @@ object schema {
     while(equalities.nonEmpty && product < minPartitionKeys) {
       val next = equalities.head
       partitionKeys = next :: partitionKeys
-      product = product * cardinality(next)
+      // currently assumming if cardinality is unspecified, it is high enough to use as partition key
+      product = product * cardinality(next).getOrElse(minPartitionKeys)
       equalities = equalities.tail
     }
-    // TODO: handle case with no equals conditions, i.e. no columns to use as partition keys
+    require(partitionKeys.nonEmpty && product >= minPartitionKeys, s"""condition ${conditions} does not have suitable equality conditions to choose a partition key""")
     partitionKeys = partitionKeys.reverse
     val partitionKeySet = partitionKeys.toSet
     val clusteringKeys = sorted.map(_.field).filter(!partitionKeySet.contains(_)).distinct
@@ -145,10 +148,11 @@ object schema {
     val groupedConditions = groupNamedConditionsByPath(conditions)
     val tables = groupedConditions.toList.map(path_conds => {
       val entityName = traverseEntityPath(model.entities, rootEntity, path_conds._1)
-      val keyNames =  appendEntityIdKey(conditionsKey(path_conds._2, model.cardinality(entityName, _), minPartitions))
-      val tableName = viewTableName(entityName, keyNames)
+      val keyNames = Try(appendEntityIdKey(conditionsKey(path_conds._2, model.cardinality(entityName, _), minPartitions)))
+      require(keyNames.isSuccess, s"failed to create view for condition ${conditions} on entity ${rootEntity}:\n${keyNames.failed.get}")
+      val tableName = viewTableName(entityName, keyNames.get)
       def nameToCol(name: String) = CassandraColumn(name, model.fieldColumnType(entityName, name))
-      val key = CassandraKey(keyNames.partitionKeys.map(nameToCol), keyNames.clusteringKeys.map(nameToCol))
+      val key = CassandraKey(keyNames.get.partitionKeys.map(nameToCol), keyNames.get.clusteringKeys.map(nameToCol))
       val columns = CassandraColumns(key, List.empty)
       (entityName, CassandraTable(keyspace, tableName, columns))
     })
