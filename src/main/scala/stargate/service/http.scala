@@ -40,14 +40,14 @@ object http {
   }
 
 
-  val formType = "multipart/form-data"
+  val hoconType = "application/hocon"
   val jsonType = "application/json"
   val pathRegex: Pattern = Pattern.compile("//")
 
-  def validateFileHeader(req: HttpServletRequest): Unit = {
+  def validateHoconHeader(req: HttpServletRequest): Unit = {
     val contentType = req.getContentType
-    if (contentType != formType) {
-      throw new InvalidContentTypeException(formType, contentType)
+    if (contentType != hoconType) {
+      throw new InvalidContentTypeException(hoconType, contentType)
     }
   }
 
