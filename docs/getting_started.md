@@ -16,7 +16,6 @@ Prerequisites: You must have **docker** to use stargate locally.
     }
     queryConditions: {
       Todo: [
-          ["isComplete", "="]
       ]
     }' > stargate.conf
     ```
