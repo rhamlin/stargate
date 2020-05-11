@@ -38,7 +38,7 @@ Ok now you're sold, go download the binaries [here](releases) for the command li
 
 ### Production
 
-We provide an easy helm chart (here)[]
+We provide an easy helm chart [here](kube/charts/stargate)
 
 ## Contributing
 
