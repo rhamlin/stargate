@@ -99,7 +99,7 @@
                     <executable>java</executable>
                     <arguments>
                         <argument>-cp</argument>
-                        <argument>target/${project.name}-${project.version}-jar-with-dependencies.jar</argument>
+                        <argument>target/${project.name}-${project.version}.jar</argument>
                         <argument>stargate.Main</argument>
                     </arguments>
                 </configuration>
