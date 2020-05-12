@@ -27,6 +27,7 @@ object schema {
   val ENTITY_ID_COLUMN_NAME = "entityId"
   val RELATION_FROM_COLUMN_NAME = "from"
   val RELATION_TO_COLUMN_NAME = "to"
+  val RELATION_JOIN_STRING = "."
   val RELATION_SPLIT_REGEX = "\\."
 
   def baseTableName(entityName: String) = entityName

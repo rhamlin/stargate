@@ -19,6 +19,7 @@ package stargate.model
 import java.util.UUID
 
 import scala.util.Random
+import stargate.schema.RELATION_JOIN_STRING
 
 object generator {
 
@@ -39,8 +40,8 @@ object generator {
     fields.map(f => (f.name, randomScalar(f))).filter(_._1 != stargate.schema.ENTITY_ID_COLUMN_NAME).toMap
   }
 
-  def createEntities(model: InputModel, visitedEntities: Set[String], entityName: String, remaining: Int, maxBranching: Int, allowInverse: Boolean = false): (Int, Map[String, Object]) = {
-    val entity = model.entities(entityName)
+  def createEntities(model: Entities, visitedEntities: Set[String], entityName: String, remaining: Int, maxBranching: Int, allowInverse: Boolean = false): (Int, Map[String, Object]) = {
+    val entity = model(entityName)
     val scalars = entityFields(entity.fields.values.toList)
     val (nextRemaining, result) = entity.relations.values.foldLeft((remaining - 1, scalars))((remaining_results, relation) => {
       val (remaining, results) = remaining_results
@@ -63,7 +64,21 @@ object generator {
     (remaining - nextRemaining, result)
   }
 
-  def createEntity(model: InputModel, entityName: String, remaining: Int = 50, maxBranching: Int = 5, allowInverse: Boolean = false): Map[String, Object] = {
+  def createEntity(model: Entities, entityName: String, remaining: Int = 50, maxBranching: Int = 5, allowInverse: Boolean = false): Map[String, Object] = {
     createEntities(model, Set(entityName), entityName, remaining, maxBranching, allowInverse)._2
+  }
+
+
+
+  def randomMatchCondition(model: Entities, entityName: String, maxTerms: Int): List[ScalarCondition[Object]] = {
+    val entity = model(entityName)
+    val relatedEntities = entity.relations.view.mapValues(r => model(r.targetEntityName))
+    val scalars = entity.fields.values ++ relatedEntities.toList.flatMap(re => re._2.fields.values.map(f => f.rename(re._1 + RELATION_JOIN_STRING + f.name)))
+    val shuffled: List[ScalarField] = Random.shuffle(scalars.toList)
+    shuffled.take(Random.between(1, maxTerms + 1)).map(f => ScalarCondition(f.name, ScalarComparison.EQ, randomScalar(f)))
+  }
+
+  def randomGetRequest(model: Entities, visitedEntities: Set[String], entityName: String): Map[String, Object] = {
+    null
   }
 }

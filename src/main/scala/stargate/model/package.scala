@@ -52,6 +52,7 @@ package object model {
   }
   case class ScalarField(name: String, scalarType: ScalarType.Value) {
     def column: CassandraColumn = CassandraColumn(name, scalarType.cassandra)
+    def rename(newName: String) = ScalarField(newName, scalarType)
   }
   case class RelationField(name: String, targetEntityName: String, inverseName: String)
   case class Entity(name: String, fields: Map[String, ScalarField], relations: Map[String, RelationField])
