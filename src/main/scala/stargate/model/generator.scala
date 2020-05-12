@@ -149,7 +149,8 @@ object generator {
 
   private def randomCreateRequest(makeConditions: String => Future[List[ScalarCondition[Object]]], model: Entities, entityName: String, visitedEntities: Set[String], executor: ExecutionContext): Future[List[Map[String,Object]]] = {
     val entity = model(entityName)
-    util.sequence(List.range(0, Random.between(1, 3)).map(_ => {
+    val size = if (Random.nextDouble() < 0.8) 1 else 2
+    util.sequence(List.range(0, size).map(_ => {
       val scalars = entityFields(entity.fields.values.toList)
       val selectedRelations = entity.relations.values.filter(r => !visitedEntities.contains(r.targetEntityName)).filter(_ => Random.nextDouble() < 0.7)
       val nextVisited = visitedEntities ++ selectedRelations.map(_.targetEntityName)
