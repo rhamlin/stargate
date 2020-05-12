@@ -106,7 +106,7 @@ package object util {
 
   def await[T](f: Future[T]): Try[T] = Try(Await.result(f, Duration.Inf))
 
-  def sequence[T, CC[X] <: IterableOnce[X]](fs: CC[Future[T]], executor: ExecutionContext): Future[CC[T]] = {
+  def sequence[T](fs: List[Future[T]], executor: ExecutionContext): Future[List[T]] = {
     implicit val ec: ExecutionContext = executor
     Future.sequence(fs)
   }

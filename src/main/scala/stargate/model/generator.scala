@@ -24,7 +24,7 @@ import stargate.model.queries.{GetQuery, GetSelection}
 import scala.util.Random
 import stargate.schema.{RELATION_JOIN_STRING, RELATION_SPLIT_REGEX}
 import stargate.util.AsyncList
-import stargate.{keywords, util}
+import stargate.{keywords, schema, util}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -101,7 +101,7 @@ object generator {
   }
   def specificMatchCondition(model: OutputModel, entityName: String, maxTerms: Int, session: CqlSession, executor: ExecutionContext): Future[List[ScalarCondition[Object]]] = {
     val entity = model.input.entities(entityName)
-    val query = GetQuery(Map.empty, GetSelection(entity.relations.view.mapValues(_ => GetSelection.empty).toMap, None, None, continue = false, None))
+    val query = GetQuery(schema.MATCH_ALL_CONDITION, GetSelection(entity.relations.view.mapValues(_ => GetSelection.empty).toMap, None, None, continue = false, None))
     val entities = stargate.query.get(model, entityName, query, session, executor)
     val random = randomMatchCondition(model.input.entities, entityName, maxTerms)
     entities.take(1, executor).flatMap(entities => {
@@ -129,13 +129,21 @@ object generator {
   def getSelection(model: Entities, visitedEntities: Set[String], entityName: String, limit: Int): Map[String,Object] = {
     val entity = model(entityName)
     val nextVisited = visitedEntities + entityName
-    val children = entity.relations.view.filterKeys(!nextVisited(_)).mapValues(r => getSelection(model, nextVisited, r.targetEntityName, limit)).toMap[String,Object]
-    val flags = Map[String,Object]((keywords.pagination.LIMIT, limit), (keywords.pagination.CONTINUE, false))
+    val children = entity.relations.view.filter(r => !nextVisited(r._2.targetEntityName)).mapValues(r => getSelection(model, nextVisited, r.targetEntityName, limit)).toMap[String,Object]
+    val flags = Map[String,Object]((keywords.pagination.LIMIT, Integer.valueOf(limit)), (keywords.pagination.CONTINUE, java.lang.Boolean.FALSE))
     flags ++ children
   }
-  def randomGetRequest(model: Entities, visitedEntities: Set[String], entityName: String, limit: Int): Map[String, Object] = {
+  def randomGetRequest(model: Entities, entityName: String, limit: Int): Map[String, Object] = {
     val condition = randomMatchCondition(model, entityName, 4)
     val selection = getSelection(model, Set.empty, entityName, limit)
     selection.updated(keywords.mutation.MATCH, untypedCondition(condition))
+  }
+  def specificGetRequest(model: OutputModel, entityName: String, limit: Int, session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
+    val randomized = randomGetRequest(model.input.entities, entityName, limit)
+    val conditions = specificMatchCondition(model, entityName, 4, session, executor)
+    conditions.map(conditions => {
+      val untyped = if(conditions.nonEmpty) untypedCondition(conditions) else keywords.query.MATCH_ALL
+      randomized.updated(keywords.mutation.MATCH, untyped)
+    })(executor)
   }
 }
