@@ -18,8 +18,15 @@ package stargate.model
 
 import java.util.UUID
 
+import com.datastax.oss.driver.api.core.CqlSession
+import stargate.model.queries.{GetQuery, GetSelection}
+
 import scala.util.Random
-import stargate.schema.RELATION_JOIN_STRING
+import stargate.schema.{RELATION_JOIN_STRING, RELATION_SPLIT_REGEX}
+import stargate.util.AsyncList
+import stargate.{keywords, util}
+
+import scala.concurrent.{ExecutionContext, Future}
 
 object generator {
 
@@ -69,6 +76,21 @@ object generator {
   }
 
 
+  def resolveEntityValue(entity: Map[String, Object], path: List[String], executor: ExecutionContext): Future[Option[Object]] = {
+    val (head :: _, tail) = path.splitAt(1)
+    if(tail.isEmpty) {
+      Future.successful(entity.get(head))
+    } else {
+      val children = entity.get(head).map(_.asInstanceOf[AsyncList[Map[String,Object]]]).getOrElse(AsyncList.empty)
+      children.take(1, executor).flatMap(child => {
+        if(child.isEmpty) {
+          Future.successful(None)
+        } else {
+          resolveEntityValue(child.head, tail, executor)
+        }
+      })(executor)
+    }
+  }
 
   def randomMatchCondition(model: Entities, entityName: String, maxTerms: Int): List[ScalarCondition[Object]] = {
     val entity = model(entityName)
@@ -77,8 +99,43 @@ object generator {
     val shuffled: List[ScalarField] = Random.shuffle(scalars.toList)
     shuffled.take(Random.between(1, maxTerms + 1)).map(f => ScalarCondition(f.name, ScalarComparison.EQ, randomScalar(f)))
   }
+  def specificMatchCondition(model: OutputModel, entityName: String, maxTerms: Int, session: CqlSession, executor: ExecutionContext): Future[List[ScalarCondition[Object]]] = {
+    val entity = model.input.entities(entityName)
+    val query = GetQuery(Map.empty, GetSelection(entity.relations.view.mapValues(_ => GetSelection.empty).toMap, None, None, continue = false, None))
+    val entities = stargate.query.get(model, entityName, query, session, executor)
+    val random = randomMatchCondition(model.input.entities, entityName, maxTerms)
+    entities.take(1, executor).flatMap(entities => {
+      if(entities.isEmpty) {
+        Future.successful(List.empty)
+      } else {
+        val entity = entities.head
+        val specific = random.map(cond => {
+          val path = cond.field.split(RELATION_SPLIT_REGEX).toList
+          resolveEntityValue(entity, path, executor).map(_.map(cond.replaceArgument))(executor)
+        })
+        util.sequence(specific, executor).map(conds => {
+          val definedConds = conds.filter(_.isDefined)
+          val maybeConds = Option.when(definedConds.nonEmpty)(definedConds.map(_.get))
+          maybeConds.getOrElse(List.empty)
+        })(executor)
+      }
+    })(executor)
+  }
+  def untypedCondition(conds: List[ScalarCondition[Object]]): List[Object] = {
+    conds.flatMap(cond => List(cond.field, cond.comparison.toString, cond.argument))
+  }
 
-  def randomGetRequest(model: Entities, visitedEntities: Set[String], entityName: String): Map[String, Object] = {
-    null
+
+  def getSelection(model: Entities, visitedEntities: Set[String], entityName: String, limit: Int): Map[String,Object] = {
+    val entity = model(entityName)
+    val nextVisited = visitedEntities + entityName
+    val children = entity.relations.view.filterKeys(!nextVisited(_)).mapValues(r => getSelection(model, nextVisited, r.targetEntityName, limit)).toMap[String,Object]
+    val flags = Map[String,Object]((keywords.pagination.LIMIT, limit), (keywords.pagination.CONTINUE, false))
+    flags ++ children
+  }
+  def randomGetRequest(model: Entities, visitedEntities: Set[String], entityName: String, limit: Int): Map[String, Object] = {
+    val condition = randomMatchCondition(model, entityName, 4)
+    val selection = getSelection(model, Set.empty, entityName, limit)
+    selection.updated(keywords.mutation.MATCH, untypedCondition(condition))
   }
 }
