@@ -37,6 +37,7 @@ object generator {
       case ScalarType.FLOAT => Random.nextFloat.asInstanceOf[Object]
       case ScalarType.STRING => Random.alphanumeric.take(10).mkString.asInstanceOf[Object]
       case ScalarType.UUID => UUID.randomUUID.asInstanceOf[Object]
+      case _ => throw new UnsupportedOperationException(s"cannot generate random value for type scalar: ${`type`.name}")
     }
   }
 
@@ -47,7 +48,7 @@ object generator {
     fields.map(f => (f.name, randomScalar(f))).filter(_._1 != stargate.schema.ENTITY_ID_COLUMN_NAME).toMap
   }
 
-  def createEntities(model: Entities, visitedEntities: Set[String], entityName: String, remaining: Int, maxBranching: Int, allowInverse: Boolean = false): (Int, Map[String, Object]) = {
+  private def createEntities(model: Entities, visitedEntities: Set[String], entityName: String, remaining: Int, maxBranching: Int, allowInverse: Boolean = false): (Int, Map[String, Object]) = {
     val entity = model(entityName)
     val scalars = entityFields(entity.fields.values.toList)
     val (nextRemaining, result) = entity.relations.values.foldLeft((remaining - 1, scalars))((remaining_results, relation) => {
@@ -121,29 +122,86 @@ object generator {
       }
     })(executor)
   }
-  def untypedCondition(conds: List[ScalarCondition[Object]]): List[Object] = {
-    conds.flatMap(cond => List(cond.field, cond.comparison.toString, cond.argument))
+  private def untypedCondition(conds: List[ScalarCondition[Object]]): Object = {
+    if(conds.nonEmpty) conds.flatMap(cond => List(cond.field, cond.comparison.toString, cond.argument)) else keywords.query.MATCH_ALL
   }
 
 
-  def getSelection(model: Entities, visitedEntities: Set[String], entityName: String, limit: Int): Map[String,Object] = {
+  private def getSelection(model: Entities, visitedEntities: Set[String], entityName: String, limit: Int): Map[String,Object] = {
     val entity = model(entityName)
-    val nextVisited = visitedEntities + entityName
-    val children = entity.relations.view.filter(r => !nextVisited(r._2.targetEntityName)).mapValues(r => getSelection(model, nextVisited, r.targetEntityName, limit)).toMap[String,Object]
+    val nextVisited: Set[String] = visitedEntities ++ entity.relations.values.map(_.targetEntityName)
+    val children = entity.relations.view.filter(r => !visitedEntities(r._2.targetEntityName)).mapValues(r => getSelection(model, nextVisited, r.targetEntityName, limit)).toMap[String,Object]
     val flags = Map[String,Object]((keywords.pagination.LIMIT, Integer.valueOf(limit)), (keywords.pagination.CONTINUE, java.lang.Boolean.FALSE))
     flags ++ children
   }
   def randomGetRequest(model: Entities, entityName: String, limit: Int): Map[String, Object] = {
     val condition = randomMatchCondition(model, entityName, 4)
-    val selection = getSelection(model, Set.empty, entityName, limit)
+    val selection = getSelection(model, Set(entityName), entityName, limit)
     selection.updated(keywords.mutation.MATCH, untypedCondition(condition))
   }
   def specificGetRequest(model: OutputModel, entityName: String, limit: Int, session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
     val randomized = randomGetRequest(model.input.entities, entityName, limit)
     val conditions = specificMatchCondition(model, entityName, 4, session, executor)
-    conditions.map(conditions => {
-      val untyped = if(conditions.nonEmpty) untypedCondition(conditions) else keywords.query.MATCH_ALL
-      randomized.updated(keywords.mutation.MATCH, untyped)
-    })(executor)
+    conditions.map(conditions => randomized.updated(keywords.mutation.MATCH, untypedCondition(conditions)))(executor)
   }
+
+
+
+  private def randomCreateRequest(makeConditions: String => Future[List[ScalarCondition[Object]]], model: Entities, entityName: String, visitedEntities: Set[String], executor: ExecutionContext): Future[List[Map[String,Object]]] = {
+    val entity = model(entityName)
+    util.sequence(List.range(0, Random.between(1, 3)).map(_ => {
+      val scalars = entityFields(entity.fields.values.toList)
+      val selectedRelations = entity.relations.values.filter(r => !visitedEntities.contains(r.targetEntityName)).filter(_ => Random.nextDouble() < 0.7)
+      val nextVisited = visitedEntities ++ selectedRelations.map(_.targetEntityName)
+      val relations = util.sequence(selectedRelations.map(r => {
+        randomMutationRequest(makeConditions, model, r.targetEntityName, nextVisited, executor).map(req => (r.name, req))(executor)
+      }).toList, executor)
+      relations.map(relations => relations.toMap ++ scalars)(executor)
+    }), executor)
+  }
+  private def randomUpdateRequest(makeConditions: String => Future[List[ScalarCondition[Object]]], model: Entities, entityName: String, visitedEntities: Set[String], executor: ExecutionContext): Future[Map[String,Object]] = {
+    val entity = model(entityName)
+    val scalarChanges = entityFields(entity.fields.values.toList).filter(_ => Random.nextDouble() < 0.7)
+    val selectedRelations = entity.relations.values.filter(r => !visitedEntities.contains(r.targetEntityName)).filter(_ => Random.nextDouble() < 0.7)
+    val nextVisited = visitedEntities ++ selectedRelations.map(_.targetEntityName)
+    val relations = util.sequence(selectedRelations.map(r => {
+      randomLinkMutationRequest(makeConditions, model, r.targetEntityName, nextVisited, executor).map(req => (r.name, req))(executor)
+    }).toList, executor)
+    val conditions = makeConditions(entityName)
+    conditions.flatMap(conditions => relations.map(relations => scalarChanges ++ relations.toMap ++ Map((keywords.mutation.MATCH, untypedCondition(conditions))))(executor))(executor)
+  }
+  private def randomMutationRequest(makeConditions: String => Future[List[ScalarCondition[Object]]], model: Entities, entityName: String, visitedEntities: Set[String], executor: ExecutionContext): Future[Map[String,Object]] = {
+    val op = Random.nextInt(2)
+    if(op == 0) {
+      randomCreateRequest(makeConditions, model, entityName, visitedEntities, executor).map(req => Map((keywords.mutation.CREATE, req)))(executor)
+    } else if(op == 1) {
+      randomUpdateRequest(makeConditions, model, entityName, visitedEntities, executor).map(req => Map((keywords.mutation.UPDATE, req)))(executor)
+    } else
+      throw new RuntimeException
+  }
+  private def randomLinkMutationRequest(makeConditions: String => Future[List[ScalarCondition[Object]]], model: Entities, entityName: String, visitedEntities: Set[String], executor: ExecutionContext): Future[Map[String,Object]] = {
+    val op = Random.nextInt(3)
+    if(op == 0) {
+      randomMutationRequest(makeConditions, model, entityName, visitedEntities, executor).map(req => Map((keywords.relation.LINK, req)))(executor)
+    } else if(op == 1) {
+      makeConditions(entityName).map(conds => Map((keywords.relation.UNLINK, untypedCondition(conds))))(executor)
+    } else if(op == 2) {
+      randomMutationRequest(makeConditions, model, entityName, visitedEntities, executor).map(req => Map((keywords.relation.REPLACE, req)))(executor)
+    } else
+      throw new RuntimeException
+  }
+
+  def randomCreateRequest(model: Entities, entityName: String): List[Map[String,Object]] = {
+    util.await(randomCreateRequest(e => Future.successful(randomMatchCondition(model, e, 4)), model, entityName, Set(entityName), ExecutionContext.parasitic)).get
+  }
+  def randomUpdateRequest(model: Entities, entityName: String): Map[String,Object] = {
+    util.await(randomUpdateRequest(e => Future.successful(randomMatchCondition(model, e, 4)), model, entityName, Set(entityName), ExecutionContext.parasitic)).get
+  }
+  def specificCreateRequest(model: OutputModel, entityName: String, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
+    randomCreateRequest(e => specificMatchCondition(model, e, 4, session, executor), model.input.entities, entityName, Set(entityName), executor)
+  }
+  def specifcUpdateRequest(model: OutputModel, entityName: String, session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
+    randomUpdateRequest(e => specificMatchCondition(model, e, 4, session, executor), model.input.entities, entityName, Set(entityName), executor)
+  }
+
 }
