@@ -205,4 +205,22 @@ object generator {
     randomUpdateRequest(e => specificMatchCondition(model, e, 4, session, executor), model.input.entities, entityName, Set(entityName), executor)
   }
 
+  private def deleteSelection(model: Entities, visitedEntities: Set[String], entityName: String): Map[String,Object] = {
+    val entity = model(entityName)
+    val selectedRelations = entity.relations.values.filter(r => !visitedEntities(r.targetEntityName)).filter(_ => Random.nextDouble() < 0.1)
+    val nextVisited: Set[String] = visitedEntities ++ selectedRelations.map(_.targetEntityName)
+    val children = selectedRelations.map(r => (r.name, deleteSelection(model, nextVisited, r.targetEntityName))).toMap[String,Object]
+    children
+  }
+  def randomDeleteRequest(model: Entities, entityName: String): Map[String, Object] = {
+    val condition = randomMatchCondition(model, entityName, 4)
+    val selection = deleteSelection(model, Set(entityName), entityName)
+    selection.updated(keywords.mutation.MATCH, untypedCondition(condition))
+  }
+  def specificDeleteRequest(model: OutputModel, entityName: String, session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
+    val randomized = randomDeleteRequest(model.input.entities, entityName)
+    val conditions = specificMatchCondition(model, entityName, 4, session, executor)
+    conditions.map(conditions => randomized.updated(keywords.mutation.MATCH, untypedCondition(conditions)))(executor)
+  }
+
 }
