@@ -16,9 +16,12 @@
 
 package stargate.metrics
 
+import com.swrve.ratelimitedlogger.RateLimitedLog
+import com.typesafe.scalalogging.LazyLogging
 import io.prometheus.client.{Counter, Gauge, Histogram}
 
-trait RequestCollector {
+trait RequestCollector
+  extends LazyLogging {
   private val totalRequests: Counter = Counter
     .build()
     .name("total_http_requests")
@@ -61,12 +64,23 @@ trait RequestCollector {
     .help("In progress http requests.")
     .register()
 
+  val rateLimitedLog: RateLimitedLog = RateLimitedLog
+    .withRateLimit(logger.underlying)
+    .maxRate(5)
+    .every(java.time.Duration.ofSeconds(10))
+    .build()
+
   private def log[A](histo: Histogram, action: () => A): A = {
     totalRequests.inc()
     inProgressRequests.inc()
     val activeTimer = histo.startTimer()
     try {
       action()
+    }catch{
+      case e: Exception => {
+        rateLimitedLog.error(s"unhandled error ${e.getMessage}")
+        throw e
+      }
     } finally {
       activeTimer.observeDuration()
       inProgressRequests.dec()
