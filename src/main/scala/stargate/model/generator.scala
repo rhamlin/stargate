@@ -201,7 +201,7 @@ object generator {
   def specificCreateRequest(model: OutputModel, entityName: String, session: CqlSession, executor: ExecutionContext): Future[List[Map[String,Object]]] = {
     randomCreateRequest(e => specificMatchCondition(model, e, 4, session, executor), model.input.entities, entityName, Set(entityName), executor)
   }
-  def specifcUpdateRequest(model: OutputModel, entityName: String, session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
+  def specificUpdateRequest(model: OutputModel, entityName: String, session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
     randomUpdateRequest(e => specificMatchCondition(model, e, 4, session, executor), model.input.entities, entityName, Set(entityName), executor)
   }
 
