@@ -10,7 +10,7 @@ import org.scalatra._
 import org.scalatra.json._
 import stargate.cassandra.CassandraTable
 import stargate.metrics.RequestCollector
-import stargate.model.{OutputModel, queries}
+import stargate.model.{OutputModel, generator, queries}
 import stargate.query.pagination.{StreamEntry, Streams}
 import stargate.{cassandra, query, util}
 
@@ -61,6 +61,9 @@ class StargateServlet(val sgConfig: ParsedStargateConfig)
     http.validateSchemaSize(request.contentLength.getOrElse(-1), maxSchemaSize)
     val input = new String(request.getInputStream.readAllBytes)
     stargate.model.parser.parseModel(input)
+  }
+  get("/:appName/generator/:entity/:op"){
+    generateQuery(params("appName"), params("entity"), params("op"), response)
   }
   get("/:appName/q/:query"){
     timeRead(() => {
@@ -141,6 +144,20 @@ class StargateServlet(val sgConfig: ParsedStargateConfig)
     if(removed == null) {
       resp.setStatus(404)
     }
+  }
+  def generateQuery(appName: String, entity: String, op: String, resp: HttpServletResponse): Unit = {
+    val model = lookupModel(appName)
+    require(model.input.entities.contains(entity), s"""database "${appName}" does not have an entity named "${entity}" """)
+    val validOps = Set("create", "get", "update", "delete")
+    require(validOps.contains(op), s"operation ${op} must be one of the following: ${validOps}")
+    val requestF = op match {
+      case "create" => generator.specificCreateRequest(model, entity, cqlSession, executor)
+      case "get" => generator.specificGetRequest(model, entity, 3, cqlSession, executor)
+      case "update" => generator.specificUpdateRequest(model, entity, cqlSession, executor)
+      case "delete" => generator.specificDeleteRequest(model, entity, cqlSession, executor)
+    }
+    val request = util.await(requestF).get
+    resp.getWriter.write(util.toJson(request))
   }
   def runPredefinedQuery(
                           appName: String,
