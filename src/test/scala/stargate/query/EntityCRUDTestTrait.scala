@@ -71,7 +71,7 @@ trait EntityCRUDTestTrait extends CassandraTestSession {
 
   def linkNestedRelation(model: OutputModel, mutations: MutationOps, entityName: String, entity: Map[String,Object], session: CqlSession, executor: ExecutionContext): Future[Map[String,Object]] = {
     val randomRelation = chooseRandomRelation(model, entityName, entity)
-    val newChildren = List.range(1, Random.between(2, 5)).map(_ => stargate.model.generator.createEntity(model.input, randomRelation.targetEntityName, 1))
+    val newChildren = List.range(1, Random.between(2, 5)).map(_ => stargate.model.generator.createEntity(model.input.entities, randomRelation.targetEntityName, 1))
     val requestMatch = Map((stargate.keywords.mutation.MATCH, List(ENTITY_ID_COLUMN_NAME, "=", entity(ENTITY_ID_COLUMN_NAME))))
     val requestLink = Map((randomRelation.name, Map((stargate.keywords.relation.LINK, Map((stargate.keywords.mutation.CREATE, newChildren))))))
     val request = requestMatch ++ requestLink
@@ -201,7 +201,7 @@ object EntityCRUDTestTrait {
   implicit val executor: ExecutionContext = ExecutionContext.global
 
   def create(model: OutputModel, mutations: MutationOps, entityName: String, session: CqlSession, executor: ExecutionContext): (Map[String,Object], Future[Map[String,Object]]) = {
-    val request = stargate.model.generator.createEntity(model.input, entityName)
+    val request = stargate.model.generator.createEntity(model.input.entities, entityName)
     val response = mutations.create(entityName, request, session, executor).map(_(0))(executor)
     (request, response)
   }

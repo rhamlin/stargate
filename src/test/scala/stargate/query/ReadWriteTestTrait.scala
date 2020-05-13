@@ -38,7 +38,7 @@ trait ReadWriteTestTrait extends CassandraTestSession {
     List.range(0, 100).foreach(_ => {
       model.input.entities.values.foreach(entity => {
         val tables = model.entityTables(entity.name)
-        val random = stargate.model.generator.createEntity(model.input, entity.name, 1)
+        val random = stargate.model.generator.createEntity(model.input.entities, entity.name, 1)
         val (id, statements) = stargate.query.write.createEntity(tables, random)
         val payload = random.updated(ENTITY_ID_COLUMN_NAME, id)
         val future = statements.map(cassandra.executeAsync(session, _, executor))

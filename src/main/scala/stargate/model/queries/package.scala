@@ -23,6 +23,9 @@ package object queries {
 
   case class GetQuery(`match`: schema.GroupedConditions[Object], selection: GetSelection)
   case class GetSelection(relations: Map[String, GetSelection], include: Option[List[String]], limit: Option[Int], continue: Boolean, ttl: Option[Int])
+  object GetSelection {
+    val empty = GetSelection(Map.empty, None, None, continue = false, None)
+  }
 
   case class DeleteQuery(`match`: schema.GroupedConditions[Object], selection: DeleteSelection)
   case class DeleteSelection(relations: Map[String, DeleteSelection])

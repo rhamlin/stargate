@@ -118,7 +118,7 @@ object parser {
       ScalarCondition(cast(field.toString +: context, field, classOf[String]), parsedComparison.get, value)
     }
     if(payload == keywords.query.MATCH_ALL) {
-      Map((List.empty, List.empty))
+      schema.MATCH_ALL_CONDITION
     } else if(payload.isInstanceOf[List[Object]]) {
       val payloadList = payload.asInstanceOf[List[Object]]
       require(payloadList.nonEmpty, s"""match conditions must be either a non-empty list of triples, or the keyword "${keywords.query.MATCH_ALL}" ${contextMessage(context)}""")
