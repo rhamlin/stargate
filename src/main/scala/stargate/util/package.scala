@@ -106,5 +106,11 @@ package object util {
 
   def await[T](f: Future[T]): Try[T] = Try(Await.result(f, Duration.Inf))
 
+  def sequence[T](fs: List[Future[T]], executor: ExecutionContext): Future[List[T]] = {
+    implicit val ec: ExecutionContext = executor
+    Future.sequence(fs)
+  }
+  def sequence[T](os: List[Option[T]]): Option[List[T]] = if(os.contains(None)) None else Some(os.flatten)
+
   def newCachedExecutor: ExecutionContext = ExecutionContext.fromExecutor(Executors.newCachedThreadPool)
 }

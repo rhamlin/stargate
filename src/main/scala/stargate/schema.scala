@@ -27,6 +27,7 @@ object schema {
   val ENTITY_ID_COLUMN_NAME = "entityId"
   val RELATION_FROM_COLUMN_NAME = "from"
   val RELATION_TO_COLUMN_NAME = "to"
+  val RELATION_JOIN_STRING = "."
   val RELATION_SPLIT_REGEX = "\\."
 
   def baseTableName(entityName: String) = entityName
@@ -38,6 +39,7 @@ object schema {
   val relationTableTypes = Map((RELATION_FROM_COLUMN_NAME, DataTypes.UUID), (RELATION_TO_COLUMN_NAME, DataTypes.UUID))
 
   type GroupedConditions[T] = Map[List[String], List[ScalarCondition[T]]]
+  def MATCH_ALL_CONDITION[T]: GroupedConditions[T] = Map((List.empty, List.empty))
 
   def appendEntityIdKey(key: CassandraKeyNames): CassandraKeyNames = {
     if(key.combined.contains(ENTITY_ID_COLUMN_NAME)){
