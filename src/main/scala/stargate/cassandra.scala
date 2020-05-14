@@ -53,10 +53,10 @@ object cassandra {
   }
   case class CassandraTable(keyspace: String, name: String, columns: CassandraColumns)
 
-  case class KeyConditionScore(missingColumns: Int, partition: Int, clustering: Int, skipped: Int) extends Ordered[KeyConditionScore] {
-    def perfect: Boolean = (missingColumns + partition + clustering + skipped) == 0
-    def tuple: (Int, Int, Int, Int) = (missingColumns, partition, clustering, skipped)
-    override def compare(that: KeyConditionScore): Int = Ordering[(Int,Int,Int,Int)].compare(this.tuple, that.tuple)
+  case class KeyConditionScore(missingColumns: Int, missingKeys: Int, missingPartitionKeys: Boolean, skipped: Int) extends Ordered[KeyConditionScore] {
+    def perfect: Boolean = (missingColumns + missingKeys + skipped) == 0 && !missingPartitionKeys
+    def tuple: (Int, Int, Boolean, Int) = (missingColumns, missingKeys, missingPartitionKeys, skipped)
+    override def compare(that: KeyConditionScore): Int = Ordering[(Int,Int,Boolean,Int)].compare(this.tuple, that.tuple)
   }
 
   type PagedResults[T] = AsyncList[T]
