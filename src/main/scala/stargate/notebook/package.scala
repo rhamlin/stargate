@@ -36,8 +36,15 @@ package object notebook {
     )
   }
 
+  def headerCell: Map[String,Object] = {
+    util.javaToScala(ConfigFactory.parseResources("jupyter/header-cell.conf").resolve.root.unwrapped).asInstanceOf[Map[String,Object]]
+  }
   def codeCell(code: String): Map[String,Object] = {
     val cell = util.javaToScala(ConfigFactory.parseResources("jupyter/empty-code-cell.conf").resolve.root.unwrapped).asInstanceOf[Map[String,Object]]
+    cell.updated("source", List(code))
+  }
+  def initCell(code: String): Map[String,Object] = {
+    val cell = util.javaToScala(ConfigFactory.parseResources("jupyter/empty-init-cell.conf").resolve.root.unwrapped).asInstanceOf[Map[String,Object]]
     cell.updated("source", List(code))
   }
 
@@ -45,12 +52,12 @@ package object notebook {
   def pythonNotebook(stargateHost: String, appName: String, model: Entities): Object = {
     val notebook = util.javaToScala(ConfigFactory.parseResources("jupyter/python/empty-notebook.conf").resolve.root.unwrapped).asInstanceOf[Map[String,Object]]
     val initCells = util.javaToScala(ConfigFactory.parseResources("jupyter/python/init-cells.conf").resolve.getValue("init_cells").unwrapped).asInstanceOf[List[Object]]
-    val library = model.values.flatMap(entity => {
+    val libraryCell = initCell(model.values.flatMap(entity => {
       keywords.config.query.crudOps.toList.map(op => {
         pythonCrudFuncs(stargateHost, appName, entity.name, op)
       })
-    }).mkString("\n")
-    util.scalaToJava(notebook.updated("cells", initCells ++ List(codeCell(library))))
+    }).mkString("\n"))
+    util.scalaToJava(notebook.updated("cells", initCells ++ List(libraryCell, headerCell)))
   }
 
 
