@@ -20,12 +20,14 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/go-connections/nat"
 )
 
 // StartCassandraOptions defines the input of Client.Start
 type StartCassandraOptions struct {
 	DockerImageHost string
 	ImageName       string
+	ExposedPorts    []string
 }
 
 // StartCassandra running docker image
@@ -46,10 +48,25 @@ func (client *Client) StartCassandra(opts *StartCassandraOptions) error {
 	}
 
 	config := container.Config{
-		Image: image,
+		Image:        image,
+		ExposedPorts: nat.PortSet{},
 	}
 
-	hostConfig := container.HostConfig{}
+	hostConfig := container.HostConfig{
+		PortBindings: nat.PortMap{},
+	}
+
+	var empty struct{}
+	for _, portValue := range opts.ExposedPorts {
+		port, err := nat.NewPort("tcp", portValue)
+		if err != nil {
+			return err
+		}
+		config.ExposedPorts[port] = empty
+		hostConfig.PortBindings[port] = []nat.PortBinding{
+			{HostPort: port.Port()},
+		}
+	}
 
 	networkConfig := network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
