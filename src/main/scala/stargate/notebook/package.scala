@@ -15,15 +15,15 @@ package object notebook {
     }
     val parseFunc = if(op == keywords.config.query.op.GET) "" else "Mutation"
     val requestFuncName = s"${op}Random${entityName}Request"
-    val opFuncName = s" ${op}${entityName}"
+    val opFuncName = s"${op}${entityName}"
     s"""def ${requestFuncName}():
-       |    parseResponse(requests.get("http://${stargateHost}/${appName}/generator/${entityName}/${op}"))
+       |    return parseResponse(requests.get("http://${stargateHost}/${appName}/generator/${entityName}/${op}"))
        |
        |def ${opFuncName}(request):
-       |    parse${parseFunc}Response(requests.${method}("http://${stargateHost}/${appName}/${entityName}", json=request))
+       |    return parse${parseFunc}Response(requests.${method}("http://${stargateHost}/${appName}/${entityName}", json=request))
        |
        |def ${op}Random${entityName}():
-       |    ${opFuncName}(${requestFuncName}())
+       |    return ${opFuncName}(${requestFuncName}())
        |
        |""".stripMargin
   }
@@ -50,7 +50,7 @@ package object notebook {
         pythonCrudFuncs(stargateHost, appName, entity.name, op)
       })
     }).mkString("\n")
-    util.scalaToJava(notebook.updated("cells", initCells ++ codeCell(library)))
+    util.scalaToJava(notebook.updated("cells", initCells ++ List(codeCell(library))))
   }
 
 
