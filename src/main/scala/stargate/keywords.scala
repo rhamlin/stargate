@@ -67,6 +67,8 @@ object keywords {
         val UPDATE: String = "update"
         val DELETE: String = "delete"
       }
+      val crudOps: Set[String] = Set(op.CREATE, op.GET, op.UPDATE, op.DELETE)
+
       object relation {
         val OP_LINK_CONFIG: String = "link"
         val OP_UNLINK_CONFIG: String = "unlink"

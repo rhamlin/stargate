@@ -44,11 +44,15 @@ package object util {
     x match {
       case x: java.util.List[Object] =>  x.asScala.map(javaToScala).toList
       case x: java.util.Map[Object, Object] => x.asScala.map((kv:(Object,Object)) => (javaToScala(kv._1), javaToScala(kv._2))).toMap
+      case x: List[Object] => x.map(javaToScala)
+      case x: Map[Object, Object] => x.map((kv: (Object,Object)) => (javaToScala(kv._1), javaToScala(kv._2)))
       case x => x
     }
   }
   def scalaToJava(x: Object): Object = {
     x match {
+      case x: java.util.List[Object] =>  x.asScala.map(scalaToJava).asJava
+      case x: java.util.Map[Object, Object] => x.asScala.map((kv:(Object,Object)) => (scalaToJava(kv._1), scalaToJava(kv._2))).toMap.asJava
       case x: List[Object] =>  x.map(scalaToJava).asJava
       case x: Map[Object, Object] => (x.map((kv:(Object,Object)) => (scalaToJava(kv._1), scalaToJava(kv._2)))).asJava : java.util.Map[Object,Object]
       case x => x

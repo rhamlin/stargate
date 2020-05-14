@@ -72,20 +72,21 @@ object schema {
 
   def keySupportsConditions(columns: CassandraColumnNames, conditions: NamedConditions): KeyConditionScore = {
     if(conditions.isEmpty) {
-      return KeyConditionScore(0,0,0,0)
+      KeyConditionScore(if(columns.key == baseTableKey.names) 0 else 1, 0, false, 0)
     }
     val allConditions = conditions.map(_.field).toSet
     val missingColumns = allConditions.diff(columns.combined.toSet).size
     val partitionSet = columns.key.partitionKeys.toSet
     val clusteringSet = columns.key.clusteringKeys.toSet
-    val allKeys = columns.combined
+    val allKeysSet = partitionSet ++ clusteringSet
     val eq_noteq = conditions.partition(x => ScalarComparison.isEquality(x.comparison))
     val eq :: noteq :: _ = List(eq_noteq._1, eq_noteq._2).map(_.map(_.field).toSet)
-    val usedKeys = allKeys.takeWhile(allConditions.contains)
-    val partitionScore = partitionSet.diff(eq).size
-    val clusteringScore = noteq.diff(clusteringSet).size
-    val skipScore = allConditions.size - usedKeys.length
-    KeyConditionScore(missingColumns, partitionScore, clusteringScore, skipScore)
+    val missingKeys = eq.diff(allKeysSet).size + noteq.diff(clusteringSet).size
+    val missingPartitionKeys = partitionSet.diff(eq).nonEmpty
+    val allKeys = columns.key.partitionKeys.map((_, true)) ++ columns.key.clusteringKeys.map((_, false))
+    val coveredKeys = allKeys.takeWhile(key => if(key._2) eq.contains(key._1) else allConditions.contains(key._1))
+    val skipScore = allConditions.size - coveredKeys.length
+    KeyConditionScore(missingColumns, missingKeys, missingPartitionKeys, skipScore)
   }
 
   def tableScores(conditions: NamedConditions, tables: List[CassandraTable]): Map[KeyConditionScore, List[CassandraTable]] = {
