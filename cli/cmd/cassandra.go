@@ -68,6 +68,8 @@ var removeCassandraCmd = &cobra.Command{
 	},
 }
 
+var ports []string
+
 var startCassandraCmd = &cobra.Command{
 	Short:   "Start a local, dockerized cassandra instance",
 	Long:    `Start a local, dockerized cassandra instance`,
@@ -82,6 +84,7 @@ var startCassandraCmd = &cobra.Command{
 		err = client.StartCassandra(&docker.StartCassandraOptions{
 			DockerImageHost: "docker.io/library/",
 			ImageName:       "cassandra",
+			ExposedPorts:    ports,
 		})
 		if err != nil {
 			cmd.PrintErrln(err)
@@ -97,4 +100,6 @@ func init() {
 	cassandraCmd.AddCommand(stopCassandraCmd)
 	cassandraCmd.AddCommand(removeCassandraCmd)
 	cassandraCmd.AddCommand(startCassandraCmd)
+
+	startCassandraCmd.PersistentFlags().StringSliceVarP(&ports, "ports", "p", []string{"9042"}, "expose cassandra ports on localhost")
 }
