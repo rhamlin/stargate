@@ -22,6 +22,7 @@ import java.util.UUID
 
 import org.junit.Assert._
 import org.junit.Test
+import stargate.service.http.{InvalidACIIScalarException, InvalidConversionException, InvalidScalarException}
 
 class ValidationsTest {
 

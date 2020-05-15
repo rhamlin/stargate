@@ -92,13 +92,12 @@ object Main {
     //wires up scalatra
     handler.addEventListener(new ScalatraListener())
     handler.setInitParameter(ScalatraListener.LifeCycleKey, "stargate.service.ScalatraBootstrap")
-    handler.addServlet(classOf[DefaultServlet], "/")
-
+    handler.addServlet(classOf[DefaultServlet], "/swagger/*")
     //expose the MetricsServlet to the /metrics endpoint. To scrape metrics for Prometheus now you just need to point to the appropriate host and port combination
     //ie http://localhost:8080/metrics
     handler.addServlet(
       new ServletHolder(new MetricsServlet()),
-      "/metrics"
+      s"/${stargate.service.StargateApiVersion}/metrics"
     );
     server.setHandler(handler)
     //has to be the last set handler, will wrap existing handler
