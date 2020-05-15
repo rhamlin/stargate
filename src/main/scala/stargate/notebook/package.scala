@@ -12,7 +12,7 @@ import scala.util.{Random, Try}
 package object notebook {
 
   case class DemoData(entityA: String, as: List[Map[String,Object]], relationName: String, entityB: String, bs: List[Map[String,Object]], duplicateField: String)
-  case class DemoCode(create1: String, link1: String, get1: String, cleanup: String)
+  case class DemoCode(create1: String, link1: String, get1: String, link2: String, get2: String, cleanup: String)
 
   def generateDemo(model: Entities, count: Int): Try[DemoData] = {
     Try({
@@ -34,22 +34,23 @@ package object notebook {
   }
 
   def indent(s: String): String = s.lines.collect(Collectors.toList()).asScala.map("  " + _).mkString("\n")
-  def idCondition(id: String): String = s"""["${schema.ENTITY_ID_COLUMN_NAME}", "${ScalarComparison.EQ.toString}", ${id}]"""
-  def idInCondition(id: String): String = s"""["${schema.ENTITY_ID_COLUMN_NAME}", "${ScalarComparison.IN.toString}", ${id}]"""
+  def conditionString(field: String, comparison: ScalarComparison.Value, arg: String): String = s"""["${field}", "${comparison.toString}", ${arg}]"""
+  def idEqCondition(id: String): String = conditionString(schema.ENTITY_ID_COLUMN_NAME, ScalarComparison.EQ, id)
+  def idInCondition(id: String): String = conditionString(schema.ENTITY_ID_COLUMN_NAME, ScalarComparison.IN, id)
   def linkByEntityIdRequest(fromId: String, fromRelation: String, toId: String): String = {
     s"""{
-       |  "${keywords.mutation.MATCH}": ${idCondition(fromId)},
-       |  "${fromRelation}": { "${keywords.relation.LINK}": { "${keywords.mutation.MATCH}": ${idCondition(toId)} } }
+       |  "${keywords.mutation.MATCH}": ${idEqCondition(fromId)},
+       |  "${fromRelation}": { "${keywords.relation.LINK}": { "${keywords.mutation.MATCH}": ${idEqCondition(toId)} } }
        |}""".stripMargin
   }
   def get(condition: String, relations: List[String], limit: Option[Int], continue: Boolean): String = {
     val limitConfig: String = limit.map(l => s""", "${keywords.pagination.LIMIT}": ${l}""").getOrElse("")
-    val continueConfig: String = if(continue) s""", "${keywords.pagination.CONTINUE}": true""" else ""
+    val continueConfig: String = if(continue) s""", "${keywords.pagination.CONTINUE}": True""" else ""
     val relationConfig = relations.map(r => s""", "${r}": {}""").mkString
     s"""{ "${keywords.mutation.MATCH}": ${condition}${limitConfig}${continueConfig}${relationConfig} }""".stripMargin
   }
   def getAll(relations: List[String], limit: Option[Int], continue: Boolean): String = get(s""""${keywords.query.MATCH_ALL}"""", relations, limit, continue)
-  def getById(id: String, relations: List[String], limit: Option[Int], continue: Boolean): String = get(idCondition(id), relations, limit, continue)
+  def getById(id: String, relations: List[String], limit: Option[Int], continue: Boolean): String = get(idEqCondition(id), relations, limit, continue)
 
 
   def pythonCrudFuncs(stargateHost: String, appName: String, entityName: String, op: String): String = {
@@ -97,11 +98,33 @@ package object notebook {
       s"""response = requests.get("http://${stargateHost}/${appName}/${demo.entityA}", json=${getRequest1})
          |print(json.dumps(parseResponse(response), indent=2))
          |""".stripMargin
+    val link2Condition = conditionString(demo.duplicateField, ScalarComparison.EQ, demo.bs(0)(demo.duplicateField).toString)
+    val linkRequest2 =
+      s"""{
+         |  "${keywords.mutation.MATCH}": ${idEqCondition(s"${a_ids}[0]")},
+         |  "${demo.relationName}": { "${keywords.relation.REPLACE}": { "${keywords.mutation.MATCH}": ${link2Condition} } }
+         |}""".stripMargin
+    val link2 =
+      s"""response = requests.put("http://${stargateHost}/${appName}/${demo.entityA}", json=${linkRequest2})
+         |print(json.dumps(parseResponse(response), indent=2))
+         |""".stripMargin
+    val getRequest2: String = get(idInCondition(s"${a_ids}"), List(demo.relationName), Some(1), true)
+    val get2 =
+      s"""page=0
+         |response = parseResponse(requests.get("http://${stargateHost}/${appName}/${demo.entityA}", json=${getRequest2}))
+         |print("Page: " + str(page))
+         |print(json.dumps(response, indent=2))
+         |while len(response) == 2:
+         |  page = page + 1
+         |  response = parseResponse(requests.get("http://${stargateHost}/${appName}/continue/" + response[1]["${keywords.pagination.CONTINUE}"]))
+         |  print("Page: " + str(page))
+         |  print(json.dumps(response, indent=2))
+         |""".stripMargin
     val cleanup =
       s"""requests.get("http://${stargateHost}/${appName}/${demo.entityA}", json={ "${keywords.mutation.MATCH}": ${idInCondition(a_ids)} })
          |requests.get("http://${stargateHost}/${appName}/${demo.entityB}", json={ "${keywords.mutation.MATCH}": ${idInCondition(b_ids)} })
          |""".stripMargin
-    DemoCode(create1, link1, get1, cleanup)
+    DemoCode(create1, link1, get1, link2, get2, cleanup)
   }
 
   def demoCells(demo: DemoData, demoCode: DemoCode): List[Map[String,Object]] = {
@@ -111,9 +134,15 @@ package object notebook {
     val linkCode = codeCell(demoCode.link1)
     val getMarkdown1 = markdownCell(s"""### Get the ${demo.entityA} entities and their related ${demo.entityB} entities""")
     val getCode1 = codeCell(demoCode.get1)
+    val linkMarkdown2 = markdownCell(
+      s"""### Linking first ${demo.entityA} to all ${demo.entityB} entities by a scalar
+         |Notice how all the generated ${demo.entityB} have the same value for field ${demo.duplicateField}""".stripMargin)
+    val linkCode2 = codeCell(demoCode.link2)
+    val getMarkdown2 = markdownCell(s"""### Query all ${demo.entityA} entities, but limit page size to 1""")
+    val getCode2 = codeCell(demoCode.get2)
     val cleanupMarkdown = markdownCell(s"""### Clean up entities created by the demo""")
     val cleanupCode = codeCell(demoCode.cleanup)
-    List(createMarkdown, createCode, linkMarkdown, linkCode, getMarkdown1, getCode1, cleanupMarkdown, cleanupCode)
+    List(createMarkdown, createCode, linkMarkdown, linkCode, getMarkdown1, getCode1, linkMarkdown2, linkCode2, getMarkdown2, getCode2, cleanupMarkdown, cleanupCode)
   }
 
 
