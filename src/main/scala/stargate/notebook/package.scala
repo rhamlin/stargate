@@ -98,7 +98,8 @@ package object notebook {
       s"""response = requests.get("http://${stargateHost}/${appName}/${demo.entityA}", json=${getRequest1})
          |print(json.dumps(parseResponse(response), indent=2))
          |""".stripMargin
-    val link2Condition = conditionString(demo.duplicateField, ScalarComparison.EQ, demo.bs(0)(demo.duplicateField).toString)
+    val duplicateValue = util.toJson(demo.bs(0)(demo.duplicateField))
+    val link2Condition = conditionString(demo.duplicateField, ScalarComparison.EQ, duplicateValue)
     val linkRequest2 =
       s"""{
          |  "${keywords.mutation.MATCH}": ${idEqCondition(s"${a_ids}[0]")},
@@ -121,8 +122,8 @@ package object notebook {
          |  print(json.dumps(response, indent=2))
          |""".stripMargin
     val cleanup =
-      s"""requests.get("http://${stargateHost}/${appName}/${demo.entityA}", json={ "${keywords.mutation.MATCH}": ${idInCondition(a_ids)} })
-         |requests.get("http://${stargateHost}/${appName}/${demo.entityB}", json={ "${keywords.mutation.MATCH}": ${idInCondition(b_ids)} })
+      s"""requests.delete("http://${stargateHost}/${appName}/${demo.entityA}", json={ "${keywords.mutation.MATCH}": ${idInCondition(a_ids)} })
+         |requests.delete("http://${stargateHost}/${appName}/${demo.entityB}", json={ "${keywords.mutation.MATCH}": ${idInCondition(b_ids)} })
          |""".stripMargin
     DemoCode(create1, link1, get1, link2, get2, cleanup)
   }
