@@ -131,7 +131,7 @@ object parser {
         val validatedConditions = conditions.map(condition => {
           val targetField = Try(targetEntity.get.fields(condition.field))
           require(targetField.isSuccess, s"Field ${condition.field} does not represent a valid scalar for entity ${targetEntity.get.name} ${contextMessage(context)}")
-          condition.replaceArgument(validateArgument(context, targetField.get, condition.argument))
+          condition.replaceArgument(validateArgument(context, targetField.get, condition.comparison, condition.argument))
         })
         (path, validatedConditions)
       })
