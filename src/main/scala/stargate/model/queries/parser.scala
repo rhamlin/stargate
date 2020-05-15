@@ -16,7 +16,7 @@
 
 package stargate.model.queries
 
-import stargate.model._
+import stargate.model.{ScalarComparison, _}
 import stargate.schema.{ENTITY_ID_COLUMN_NAME, GroupedConditions}
 import stargate.{keywords, schema}
 
@@ -109,7 +109,7 @@ object parser {
   def parseCreate(entities: Entities, entityName: String, payload: Object): CreateMutation = parseCreate(entities, List.empty, entityName, payload)
 
 
-  def parseConditions[T](validateArgument: (List[String], ScalarField, Object) => T, entities: Entities, context:List[String], entityName: String, payload: Object): GroupedConditions[T] = {
+  def parseConditions[T](validateArgument: (List[String], ScalarField, ScalarComparison.Value, Object) => T, entities: Entities, context:List[String], entityName: String, payload: Object): GroupedConditions[T] = {
     def parseCondition(field_op_val: List[Object]): ScalarCondition[Object] = {
       require(field_op_val.length == 3, s"condition must have exactly 3 elements (field, comparison, argument) ${contextMessage(context)}")
       val field :: comparison :: value :: _ = field_op_val
@@ -142,15 +142,24 @@ object parser {
     }
   }
   def parseConditions(entities: Entities, context:List[String], entityName: String, payload: Object): GroupedConditions[Object] = {
-    def convert(context:List[String], field: ScalarField, arg: Object): Object = {
-      val converted = Try(field.scalarType.convert(arg))
-      require(converted.isSuccess, s"Failed to convert field ${field.name} to type ${field.scalarType.name} from type ${arg.getClass} ${contextMessage(context)}")
-      converted.get
+    def convert(context:List[String], field: ScalarField, comparison: ScalarComparison.Value, arg: Object): Object = {
+      def convertInner(arg: Object): Object = {
+        val converted = Try(field.scalarType.convert(arg))
+        require(converted.isSuccess, s"Failed to convert field ${field.name} to type ${field.scalarType.name} from type ${arg.getClass} ${contextMessage(context)}")
+        converted.get
+      }
+      if(comparison == ScalarComparison.IN) {
+        val asList = Try(arg.asInstanceOf[List[Object]])
+        require(asList.isSuccess, s"Argument ${arg} for ${ScalarComparison.IN.toString} condition must be a list ${contextMessage(context)}")
+        asList.get.map(convertInner)
+      } else {
+        convertInner(arg)
+      }
     }
     parseConditions(convert, entities, context, entityName, payload)
   }
   def parseNamedConditions(entities: Entities, context:List[String], entityName: String, payload: Object): GroupedConditions[(ScalarType.Value, String)] = {
-    def convert(context:List[String], field: ScalarField, arg: Object): (ScalarType.Value, String) = (field.scalarType, cast(field.name +: context, arg, classOf[String]))
+    def convert(context:List[String], field: ScalarField, comparison: ScalarComparison.Value, arg: Object): (ScalarType.Value, String) = (field.scalarType, cast(field.name +: context, arg, classOf[String]))
     parseConditions(convert, entities, context, entityName, payload)
   }
 
