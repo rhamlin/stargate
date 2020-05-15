@@ -1,19 +1,24 @@
 package stargate
 
-import com.typesafe.config.ConfigFactory
-import stargate.model.{Entities, InputModel, generator}
+import java.util.stream.Collectors
 
-import scala.util.Try
+import com.typesafe.config.ConfigFactory
+
+import scala.jdk.CollectionConverters._
+import stargate.model.{Entities, InputModel, ScalarComparison, generator}
+
+import scala.util.{Random, Try}
 
 package object notebook {
 
-  case class DemoData(entityA: String, as: List[Map[String,Object]], relationName: String, entityB: String, bs: List[Map[String,Object]])
+  case class DemoData(entityA: String, as: List[Map[String,Object]], relationName: String, entityB: String, bs: List[Map[String,Object]], duplicateField: String)
+  case class DemoCode(create1: String, link1: String, get1: String)
 
   def generateDemo(model: Entities, count: Int): Try[DemoData] = {
     Try({
-      val possibleRelations = model.values.toList.map(e => {
+      val possibleRelations = Random.shuffle(model.values.toList).map(e => {
         val hasScalars = e.fields.size > 1
-        val relationsWithScalars = e.relations.values.filter(r => model(r.targetEntityName).fields.size > 1)
+        val relationsWithScalars = Random.shuffle(e.relations.values.toList).filter(r => model(r.targetEntityName).fields.size > 1)
         (e.name, Option.when(hasScalars)(()).flatMap(_ => relationsWithScalars.headOption))
       })
       val chosenRelation = possibleRelations.filter(_._2.isDefined).head
@@ -21,9 +26,30 @@ package object notebook {
       val relation = chosenRelation._2.get.name
       val b = chosenRelation._2.get.targetEntityName
       def generate(e: String): List[Map[String, Object]] = List.range(0, count).map(_ => generator.entityFields(model(e).fields.values.toList))
-      DemoData(a, generate(a), relation, b, generate(b))
+      val duplicateField = model(b).fields.values.filter(_.name != schema.ENTITY_ID_COLUMN_NAME).head
+      val duplicateValue = generator.randomScalar(duplicateField)
+      val duplicateBs = generate(b).map(_.updated(duplicateField.name, duplicateValue))
+      DemoData(a, generate(a), relation, b, duplicateBs, duplicateField.name)
     })
   }
+
+  def indent(s: String): String = s.lines.collect(Collectors.toList()).asScala.map("  " + _).mkString("\n")
+  def idCondition(id: String): String = s"""["${schema.ENTITY_ID_COLUMN_NAME}", "${ScalarComparison.EQ.toString}", ${id}]"""
+  def linkByEntityIdRequest(fromId: String, fromRelation: String, toId: String): String = {
+    s"""{
+       |  "${keywords.mutation.MATCH}": ${idCondition(fromId)},
+       |  "${fromRelation}": { "${keywords.relation.LINK}": { "${keywords.mutation.MATCH}": ${idCondition(toId)} } }
+       |}""".stripMargin
+  }
+  def get(condition: String, relations: List[String], limit: Option[Int], continue: Boolean): String = {
+    val limitConfig: String = limit.map(l => s""", "${keywords.pagination.LIMIT}": ${l}""").getOrElse("")
+    val continueConfig: String = if(continue) s""", "${keywords.pagination.CONTINUE}": true""" else ""
+    val relationConfig = relations.map(r => s""", "${r}": {}""").mkString
+    s"""{ "${keywords.mutation.MATCH}": ${condition}${limitConfig}${continueConfig}${relationConfig} }""".stripMargin
+  }
+  def getAll(relations: List[String], limit: Option[Int], continue: Boolean): String = get(s""""${keywords.query.MATCH_ALL}"""", relations, limit, continue)
+  def getById(id: String, relations: List[String], limit: Option[Int], continue: Boolean): String = get(idCondition(id), relations, limit, continue)
+
 
   def pythonCrudFuncs(stargateHost: String, appName: String, entityName: String, op: String): String = {
     val method = op match {
@@ -47,18 +73,42 @@ package object notebook {
        |""".stripMargin
   }
 
-  def pythonDemo(stargateHost: String, appName: String, demo: DemoData): String = {
+  def pythonDemoCode(stargateHost: String, appName: String, demo: DemoData): DemoCode = {
+    val a_resp = s"${demo.entityA}_response"
+    val b_resp = s"${demo.entityB}_response"
     val a_ids = s"${demo.entityA}_ids"
     val b_ids = s"${demo.entityB}_ids"
-    s"""
-       |${a_ids} = parseResponse(requests.post("http://${stargateHost}/${appName}/${demo.entityA}", json=${util.toPrettyJson(demo.as)}))
-       |print(${a_ids})
+    val create1 = s"""${a_resp} = requests.post("http://${stargateHost}/${appName}/${demo.entityA}", json=${util.toPrettyJson(demo.as)})
+       |${a_ids} = parseMutationResponse(${a_resp})
+       |print("${demo.entityA} ids:" + str(${a_ids}))
        |
-       |${b_ids} = parseResponse(requests.post("http://${stargateHost}/${appName}/${demo.entityB}", json=${util.toPrettyJson(demo.bs)}))
-       |print(${b_ids})
+       |${b_resp} = requests.post("http://${stargateHost}/${appName}/${demo.entityB}", json=${util.toPrettyJson(demo.bs)})
+       |${b_ids} = parseMutationResponse(${b_resp})
+       |print("${demo.entityB} ids:" + str(${b_ids}))
        |""".stripMargin
+    val linkRequest1: String = indent(linkByEntityIdRequest(s"${a_ids}[i]", demo.relationName, s"${b_ids}[i]")).strip
+    val link1 =
+      s"""for i in range(${demo.as.length}):
+         |  requests.put("http://${stargateHost}/${appName}/${demo.entityA}", json=${linkRequest1})
+         |""".stripMargin
+    val getRequest1: String = getById(s"${a_ids}[i]", List(demo.relationName), Some(demo.as.length), false)
+    val get1 =
+      s"""for i in range(${demo.as.length}):
+         |  response = requests.get("http://${stargateHost}/${appName}/${demo.entityA}", json=${getRequest1})
+         |  print(json.dumps(parseResponse(response), indent=2))
+         |""".stripMargin
+    DemoCode(create1, link1, get1)
   }
 
+  def demoCells(demo: DemoData, demoCode: DemoCode): List[Map[String,Object]] = {
+    val createMarkdown = markdownCell(s"""### Create some instances of ${demo.entityA} and ${demo.entityB}""")
+    val createCode = codeCell(demoCode.create1)
+    val linkMarkdown = markdownCell(s"""### Link some ${demo.entityA} entities to some ${demo.entityB} entities""")
+    val linkCode = codeCell(demoCode.link1)
+    val getMarkdown1 = markdownCell(s"""### Get all ${demo.entityA} entities and their related ${demo.entityB} entities""")
+    val getCode1 = codeCell(demoCode.get1)
+    List(createMarkdown, createCode, linkMarkdown, linkCode, getMarkdown1, getCode1)
+  }
 
 
   def markdownCell(text: String): Map[String,Object] = {
@@ -90,8 +140,8 @@ package object notebook {
         pythonCrudFuncs(stargateHost, appName, entity.name, op)
       })
     }).mkString("\n"))
-    val demoCells = generateDemo(model, 3).map(d => List(codeCell(pythonDemo(stargateHost, appName, d)))).getOrElse(List.empty)
-    val cells = initCells ++ List(libraryCell, headerCell) ++ demoCells
+    val _demoCells = generateDemo(model, 3).map(d => demoCells(d, pythonDemoCode(stargateHost, appName, d))).getOrElse(List.empty)
+    val cells = initCells ++ List(libraryCell, headerCell) ++ _demoCells
     util.scalaToJava(notebook.updated("cells", cells))
   }
 
