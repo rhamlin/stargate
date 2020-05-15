@@ -12,7 +12,7 @@ import scala.util.{Random, Try}
 package object notebook {
 
   case class DemoData(entityA: String, as: List[Map[String,Object]], relationName: String, entityB: String, bs: List[Map[String,Object]], duplicateField: String)
-  case class DemoCode(create1: String, link1: String, get1: String)
+  case class DemoCode(create1: String, link1: String, get1: String, cleanup: String)
 
   def generateDemo(model: Entities, count: Int): Try[DemoData] = {
     Try({
@@ -35,6 +35,7 @@ package object notebook {
 
   def indent(s: String): String = s.lines.collect(Collectors.toList()).asScala.map("  " + _).mkString("\n")
   def idCondition(id: String): String = s"""["${schema.ENTITY_ID_COLUMN_NAME}", "${ScalarComparison.EQ.toString}", ${id}]"""
+  def idInCondition(id: String): String = s"""["${schema.ENTITY_ID_COLUMN_NAME}", "${ScalarComparison.IN.toString}", ${id}]"""
   def linkByEntityIdRequest(fromId: String, fromRelation: String, toId: String): String = {
     s"""{
        |  "${keywords.mutation.MATCH}": ${idCondition(fromId)},
@@ -91,13 +92,16 @@ package object notebook {
       s"""for i in range(${demo.as.length}):
          |  requests.put("http://${stargateHost}/${appName}/${demo.entityA}", json=${linkRequest1})
          |""".stripMargin
-    val getRequest1: String = getById(s"${a_ids}[i]", List(demo.relationName), Some(demo.as.length), false)
+    val getRequest1: String = get(idInCondition(s"${a_ids}"), List(demo.relationName), Some(demo.as.length), false)
     val get1 =
-      s"""for i in range(${demo.as.length}):
-         |  response = requests.get("http://${stargateHost}/${appName}/${demo.entityA}", json=${getRequest1})
-         |  print(json.dumps(parseResponse(response), indent=2))
+      s"""response = requests.get("http://${stargateHost}/${appName}/${demo.entityA}", json=${getRequest1})
+         |print(json.dumps(parseResponse(response), indent=2))
          |""".stripMargin
-    DemoCode(create1, link1, get1)
+    val cleanup =
+      s"""requests.get("http://${stargateHost}/${appName}/${demo.entityA}", json={ "${keywords.mutation.MATCH}": ${idInCondition(a_ids)} })
+         |requests.get("http://${stargateHost}/${appName}/${demo.entityB}", json={ "${keywords.mutation.MATCH}": ${idInCondition(b_ids)} })
+         |""".stripMargin
+    DemoCode(create1, link1, get1, cleanup)
   }
 
   def demoCells(demo: DemoData, demoCode: DemoCode): List[Map[String,Object]] = {
@@ -105,9 +109,11 @@ package object notebook {
     val createCode = codeCell(demoCode.create1)
     val linkMarkdown = markdownCell(s"""### Link some ${demo.entityA} entities to some ${demo.entityB} entities""")
     val linkCode = codeCell(demoCode.link1)
-    val getMarkdown1 = markdownCell(s"""### Get all ${demo.entityA} entities and their related ${demo.entityB} entities""")
+    val getMarkdown1 = markdownCell(s"""### Get the ${demo.entityA} entities and their related ${demo.entityB} entities""")
     val getCode1 = codeCell(demoCode.get1)
-    List(createMarkdown, createCode, linkMarkdown, linkCode, getMarkdown1, getCode1)
+    val cleanupMarkdown = markdownCell(s"""### Clean up entities created by the demo""")
+    val cleanupCode = codeCell(demoCode.cleanup)
+    List(createMarkdown, createCode, linkMarkdown, linkCode, getMarkdown1, getCode1, cleanupMarkdown, cleanupCode)
   }
 
 
