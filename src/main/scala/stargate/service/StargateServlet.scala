@@ -405,7 +405,7 @@ class StargateServlet(val sgConfig: ParsedStargateConfig)
     parameter pathParam[String]("id")
      .example("5ed0b80b-2934-4c58-acba-830d8bce7d13"))
      .description("id of the original query")
-  get(s"$StargateApiVersion/api/:namespace/query/continue/:id", operation(continueQuerySwagger)){
+  get(s"/$StargateApiVersion/api/:namespace/query/continue/:id", operation(continueQuerySwagger)){
     timeRead(() => {
       continueQuery(params("namespace"), UUID.fromString(params("id")), response)
     })

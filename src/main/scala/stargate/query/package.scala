@@ -84,7 +84,7 @@ package object query {
   def matchEntities(model: OutputModel, entityName: String, conditions: GroupedConditions[Object], session: CqlSession, executor: ExecutionContext): AsyncList[UUID] = {
     val groupedEntities = conditions.toList.map(path_conds => {
       val (path, conditions) = path_conds
-      val termConditions = conditions.map(cond => cond.replaceArgument[Term](QueryBuilder.literal(cond.argument)))
+      val termConditions = conditions.map(read.termCondition)
       (path, matchEntities(model, entityName, path, termConditions, session, executor))
     }).toMap
     val rootIds = groupedEntities.toList.map(path_ids => resolveReverseRelations(model, entityName, path_ids._1, path_ids._2, session, executor))

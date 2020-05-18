@@ -40,6 +40,18 @@ object read {
     override def appendTo(builder: lang.StringBuilder): Unit = throw new UnsupportedOperationException
     def asIterable: java.lang.Iterable[Term] = terms.asJava
   }
+  object ListTerm {
+    def fromObjects(args: List[Object]) = ListTerm(args.map(QueryBuilder.literal))
+  }
+  def termCondition(cond: ScalarCondition[Object]): ScalarCondition[Term] = {
+    val arg = if(cond.comparison != ScalarComparison.IN) {
+      QueryBuilder.literal(cond.argument)
+    } else {
+      ListTerm.fromObjects(cond.argument.asInstanceOf[List[Object]])
+    }
+    cond.replaceArgument(arg)
+  }
+
 
   def appendWhere[T <: OngoingWhereClause[T]](select: OngoingWhereClause[T], condition: ScalarCondition[Term]) = {
     val where = select.whereColumn(Strings.doubleQuote(condition.field))
@@ -67,7 +79,7 @@ object read {
   }
 
   def relatedSelect(keyspace: String, relationTable: String, fromIds: List[UUID], session: CqlSession,  executor: ExecutionContext): AsyncList[UUID] = {
-    val conditions = List(ScalarCondition[Term](schema.RELATION_FROM_COLUMN_NAME, ScalarComparison.IN, ListTerm(fromIds.map(QueryBuilder.literal))))
+    val conditions = List(ScalarCondition[Term](schema.RELATION_FROM_COLUMN_NAME, ScalarComparison.IN, ListTerm.fromObjects(fromIds)))
     val rows = cassandra.queryAsync(session, selectStatement(keyspace, relationTable, conditions).build, executor)
     rows.map(_.getUuid(schema.RELATION_TO_COLUMN_NAME), executor)
   }
