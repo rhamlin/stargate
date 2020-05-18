@@ -143,7 +143,7 @@ package object notebook {
     val getCode2 = codeCell(demoCode.get2)
     val cleanupMarkdown = markdownCell(s"""### Clean up entities created by the demo""")
     val cleanupCode = codeCell(demoCode.cleanup)
-    List(createMarkdown, createCode, linkMarkdown, linkCode, getMarkdown1, getCode1, linkMarkdown2, linkCode2, getMarkdown2, getCode2, cleanupMarkdown, cleanupCode)
+    List(createMarkdown, createCode, linkMarkdown, linkCode, getMarkdown1, getCode1, linkMarkdown2, linkCode2, getMarkdown2, getCode2) //, cleanupMarkdown, cleanupCode)
   }
 
 
