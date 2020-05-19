@@ -38,14 +38,12 @@ object datamodelRepository {
   val TIMESTAMP_COLUMN = "timestamp"
   val DATAMODEL_COLUMN = "datamodel"
 
-
   def repoTable(keyspace: String): CassandraTable = {
     CassandraTable(keyspace, TABLE_NAME, CassandraColumns(
       CassandraKey(List(CassandraColumn(NAME_COLUMN, DataTypes.TEXT)), List(CassandraColumn(TIMESTAMP_COLUMN, DataTypes.TIMESTAMP))),
       List(CassandraColumn(DATAMODEL_COLUMN, DataTypes.TEXT))
     ))
   }
-
   def ensureRepoTableExists(keyspace: String, replication: Int, session: CqlSession, executor: ExecutionContext): Future[CassandraTable] = {
     val table = repoTable(keyspace)
     val ensureKeyspace = cassandra.createKeyspaceAsync(session, keyspace, replication, executor)

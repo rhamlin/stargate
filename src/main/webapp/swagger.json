@@ -1,0 +1,134 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "The Stargate API",
+    "version": "v1",
+    "description": "Docs for the Stargate API",
+    "termsOfService": "https://github.com/datastax/stargate",
+    "contact": {
+      "name": "DataStax",
+      "url": "https://github.com/datastax/stargate",
+      "email": "sales@datastax.com"
+    },
+    "license": {
+      "name": "Apache 2.0",
+      "url": "https://apache.org/licenses/LICENSE-2.0"
+    }
+  },
+  "paths": {
+    "/v1/api/{namespace}/schema": {
+      "delete": {
+        "operationId": "deleteNamespace",
+        "summary": "delete namespace",
+        "description": "delete the specified namespace",
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "namespace",
+            "description": "namespace to delete",
+            "required": true,
+            "in": "path",
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createNamespace",
+        "summary": "create a new namespace",
+        "description": "create a new namespace from a posted data model document",
+        "consumes": [
+          "application/hocon"
+        ],
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "namespace",
+            "description": "namespace to create",
+            "required": true,
+            "in": "path",
+            "type": "string"
+          },
+          {
+            "name": "payload",
+            "description": "creates an app to query against based on a given hocon document. This does do validation and requires application/hocon",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "type": "string",
+              "example": "\nentities {\n    Customer {\n        fields {\n            id: uuid\n            email: string\n            firstName: string\n            lastName: string\n        }\n        relations {\n            addresses { type: Address, inverse: customers }\n            orders { type: Order, inverse: customer }\n        }\n    }\n    Order {\n        fields {\n            id: uuid\n            time: int\n            subtotal: int\n            tax: int\n            total: int\n        }\n        relations {\n            customer { type: Customer, inverse: orders }\n            deliveryAddress { type: Address, inverse: orders }\n            products { type: Product, inverse: orders }\n        }\n    }\n    Product {\n        fields {\n            id: uuid\n            name: string\n            price: int\n        }\n        relations {\n            orders { type: Order, inverse: products }\n        }\n    }\n    Address {\n        fields {\n            street: string\n            zipCode: string\n        }\n        relations {\n            customers { type: Customer, inverse: addresses }\n            orders { type: Order, inverse: deliveryAddress }\n        }\n    }\n}\nqueries: {\n    Customer: {\n        customerByFirstName {\n            \"-match\": [firstName, \"=\", customerName]\n            \"-include\": [firstName, lastName, email],\n            \"addresses\": {\n                \"-include\": [street, zipCode]\n            }\n            \"orders\": {\n                \"-include\": [id, time, total]\n                \"products\": {\n                    \"-include\": [id, name, price]\n                }\n            }\n        }\n    }\n}\nqueryConditions: {\n    Customer: [\n        [\"firstName\", \"=\"]\n        [\"email\", \"=\", \"orders.deliveryAddress.street\", \"=\"]\n    ]\n}\n\n"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/definitions/InputModel"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/validate": {
+      "post": {
+        "operationId": "validateNamespace",
+        "summary": "validation of app document",
+        "description": "validate the data model document is valid",
+        "consumes": [
+          "application/hocon"
+        ],
+        "deprecated": false,
+        "parameters": [
+          {
+            "name": "payload",
+            "description": "Payload will validate the following hocon document for correctness",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "example": "entities {\n    Customer {\n        fields {\n            id: uuid\n            email: string\n            firstName: string\n            lastName: string\n        }\n        relations {\n            addresses { type: Address, inverse: customers }\n            orders { type: Order, inverse: customer }\n        }\n    }\n    Order {\n        fields {\n            id: uuid\n            time: int\n            subtotal: int\n            tax: int\n            total: int\n        }\n        relations {\n            customer { type: Customer, inverse: orders }\n            deliveryAddress { type: Address, inverse: orders }\n            products { type: Product, inverse: orders }\n        }\n    }\n    Product {\n        fields {\n            id: uuid\n            name: string\n            price: int\n        }\n        relations {\n            orders { type: Order, inverse: products }\n        }\n    }\n    Address {\n        fields {\n            street: string\n            zipCode: string\n        }\n        relations {\n            customers { type: Customer, inverse: addresses }\n            orders { type: Order, inverse: deliveryAddress }\n        }\n    }\n}\nqueries: {\n    Customer: {\n        customerByFirstName {\n            \"-match\": [firstName, \"=\", customerName]\n            \"-include\": [firstName, lastName, email],\n            \"addresses\": {\n                \"-include\": [street, zipCode]\n            }\n            \"orders\": {\n                \"-include\": [id, time, total]\n                \"products\": {\n                    \"-include\": [id, name, price]\n                }\n            }\n        }\n    }\n}\nqueryConditions: {\n    Customer: [\n        [\"firstName\", \"=\"]\n        [\"email\", \"=\", \"orders.deliveryAddress.street\", \"=\"]\n    ]\n}\n",
+              "additionalProperties": {
+                "$ref": "#/definitions/InputModel"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/definitions/InputModel"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "InputModel": {
+      "type": "object",
+      "properties": {
+        "entities": {
+        },
+        "queries": {
+
+        },
+        "conditions": {
+
+        }
+      }
+    }
+  },
+  "securityDefinitions": {}
+}

@@ -18,321 +18,70 @@ package stargate.service
 import java.util.UUID
 import java.util.concurrent._
 
-import com.datastax.oss.driver.api.core.CqlSession
 import javax.servlet.http.HttpServletResponse
 import org.json4s.{DefaultFormats, Formats}
 import org.scalatra._
 import org.scalatra.json._
-import org.scalatra.swagger._
-import stargate.cassandra.CassandraTable
-import stargate.metrics.RequestCollector
-import stargate.model.{InputModel, OutputModel, generator, queries}
+import stargate.model.{OutputModel, generator, queries}
 import stargate.query.pagination.{StreamEntry, Streams}
 import stargate.{cassandra, query, util}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Try
+import com.datastax.oss.driver.api.core.CqlSession
+import stargate.cassandra.CassandraTable
+import com.typesafe.scalalogging.LazyLogging
 
-class StargateServlet(val sgConfig: ParsedStargateConfig)
-                     (implicit val swagger: Swagger)
+class StargateServlet(val sgConfig: ParsedStargateConfig,
+    val cqlSession: CqlSession,
+    val apps: Namespaces,
+    val datamodelRepoTable: CassandraTable)
   extends ScalatraServlet
-    with RequestCollector
     with NativeJsonSupport
-    with SwaggerSupport
-{
+    with CqlSupport
+    with LazyLogging
+    {
   val executor: ExecutionContextExecutor = ExecutionContext.global
-  val apps = new ConcurrentHashMap[String, OutputModel]()
-  val continuationCache =
-    new ConcurrentHashMap[UUID, (StreamEntry, ScheduledFuture[Unit])]()
-  val continuationCleaner: ScheduledExecutorService =
-    Executors.newScheduledThreadPool(1)
-
+  val continuationCache = new ConcurrentHashMap[UUID, (StreamEntry, ScheduledFuture[Unit])]()
+  val continuationCleaner: ScheduledExecutorService = Executors.newScheduledThreadPool(1)
   val maxSchemaSize: Long = sgConfig.maxSchemaSizeKB * 1024
   val maxMutationSize: Long = sgConfig.maxMutationSizeKB * 1024
   val maxRequestSize: Long = sgConfig.maxRequestSizeKB * 1024
-
-  val cqlSession: CqlSession = cassandra.session(sgConfig.cassandraContactPoints, sgConfig.cassandraDataCenter)
-  val datamodelRepoTable: CassandraTable = util.await(datamodelRepository.ensureRepoTableExists(sgConfig.stargateKeyspace, sgConfig.cassandraReplication, cqlSession, executor)).get
-  // reload previous datamodels
-  Await.result(datamodelRepository.fetchAllLatestDatamodels(datamodelRepoTable, cqlSession, executor), Duration.Inf).foreach(name_config => {
-    logger.info(s"reloading datamodel from cassandra: ${name_config._1}")
-    val model = stargate.schema.outputModel(stargate.model.parser.parseModel(name_config._2), name_config._1)
-    apps.put(name_config._1, model)
-  })
-
   //Sets default json output
   protected implicit lazy val jsonFormats: Formats = DefaultFormats
-  //necessary magic for the swagger API
-  protected val applicationDescription = "The Stargate API. It exposes http operations for querying Apache Cassandra and DataStax Enterprise."
 
-  val createNamespaceSwagger: SwaggerSupportSyntax.OperationBuilder
-  = (apiOperation[Map[String,Object]]("createNamespace")
-    summary "create a new namespace"
-    consumes "application/hocon"
-    description "create a new namespace from a posted data model document"
-    parameter bodyParam[String]("payload")
-      .description( """"
-                      |creates an app to query against based on a given
-                      |hocon document. This does do validation and requires application/hocon
-                      |```
-                      |entities {
-                      |    Customer {
-                      |        fields {
-                      |            id: uuid
-                      |            email: string
-                      |            firstName: string
-                      |            lastName: string
-                      |        }
-                      |        relations {
-                      |            addresses { type: Address, inverse: customers }
-                      |            orders { type: Order, inverse: customer }
-                      |        }
-                      |    }
-                      |    Order {
-                      |        fields {
-                      |            id: uuid
-                      |            time: int
-                      |            subtotal: int
-                      |            tax: int
-                      |            total: int
-                      |        }
-                      |        relations {
-                      |            customer { type: Customer, inverse: orders }
-                      |            deliveryAddress { type: Address, inverse: orders }
-                      |            products { type: Product, inverse: orders }
-                      |        }
-                      |    }
-                      |    Product {
-                      |        fields {
-                      |            id: uuid
-                      |            name: string
-                      |            price: int
-                      |        }
-                      |        relations {
-                      |            orders { type: Order, inverse: products }
-                      |        }
-                      |    }
-                      |    Address {
-                      |        fields {
-                      |            street: string
-                      |            zipCode: string
-                      |        }
-                      |        relations {
-                      |            customers { type: Customer, inverse: addresses }
-                      |            orders { type: Order, inverse: deliveryAddress }
-                      |        }
-                      |    }
-                      |}
-                      |queries: {
-                      |    Customer: {
-                      |        customerByFirstName {
-                      |            "-match": [firstName, "=", customerName]
-                      |            "-include": [firstName, lastName, email],
-                      |            "addresses": {
-                      |                "-include": [street, zipCode]
-                      |            }
-                      |            "orders": {
-                      |                "-include": [id, time, total]
-                      |                "products": {
-                      |                    "-include": [id, name, price]
-                      |                }
-                      |            }
-                      |        }
-                      |    }
-                      |}
-                      |queryConditions: {
-                      |    Customer: [
-                      |        ["firstName", "="]
-                      |        ["email", "=", "orders.deliveryAddress.street", "="]
-                      |    ]
-                      |}
-                      |```
-                      |""".stripMargin)
-    parameter pathParam[String]("namespace")
-    .example("testNS")
-    .description("namespace to create")
-    )
-  post(s"/$StargateApiVersion/api/:namespace/schema",
-    operation(createNamespaceSwagger)){
-    timeSchemaCreate(() => {
-        http.validateHoconHeader(request)
-        http.validateSchemaSize(request.getContentLengthLong, maxSchemaSize)
-        val input = new String(request.getInputStream.readAllBytes)
-        postSchema(params("namespace"), input, response)
-      })
+  post(s"/$StargateApiVersion/api/:namespace/schema"){
+      http.validateHoconHeader(request)
+      http.validateSchemaSize(request.getContentLengthLong, maxSchemaSize)
+      val input = new String(request.getInputStream.readAllBytes)
+      postSchema(params("namespace"), input)
   }
 
-  val deleteNamespaceSwagger: SwaggerSupportSyntax.OperationBuilder
-  = (apiOperation[Map[String, Object]]("deleteNamespace")
-    summary "delete namespace"
-    description "delete the specified namespace"
-    parameter pathParam[String]("namespace")
-      .example("testNS")
-      .description("namespace to delete")
-    )
-  delete(s"/$StargateApiVersion/api/:namespace/schema", operation(deleteNamespaceSwagger)){
+  delete(s"/$StargateApiVersion/api/:namespace/schema"){
     deleteSchema(params("namespace"), response)
     //TODO return json success/failure
   }
 
-  val validateNamespaceDocSwagger: SwaggerSupportSyntax.OperationBuilder
-  = (apiOperation[Map[String, Object]]("validateNamespace")
-    summary "validation of app document"
-    description "validate the data model document is valid"
-    consumes "application/hocon"
-    parameter bodyParam[Map[String, Object]]("payload")
-    .description(
-      """"
-        |Payload will validate the following hocon document for correctness
-        |```
-        |entities {
-        |    Customer {
-        |        fields {
-        |            id: uuid
-        |            email: string
-        |            firstName: string
-        |            lastName: string
-        |        }
-        |        relations {
-        |            addresses { type: Address, inverse: customers }
-        |            orders { type: Order, inverse: customer }
-        |        }
-        |    }
-        |    Order {
-        |        fields {
-        |            id: uuid
-        |            time: int
-        |            subtotal: int
-        |            tax: int
-        |            total: int
-        |        }
-        |        relations {
-        |            customer { type: Customer, inverse: orders }
-        |            deliveryAddress { type: Address, inverse: orders }
-        |            products { type: Product, inverse: orders }
-        |        }
-        |    }
-        |    Product {
-        |        fields {
-        |            id: uuid
-        |            name: string
-        |            price: int
-        |        }
-        |        relations {
-        |            orders { type: Order, inverse: products }
-        |        }
-        |    }
-        |    Address {
-        |        fields {
-        |            street: string
-        |            zipCode: string
-        |        }
-        |        relations {
-        |            customers { type: Customer, inverse: addresses }
-        |            orders { type: Order, inverse: deliveryAddress }
-        |        }
-        |    }
-        |}
-        |queries: {
-        |    Customer: {
-        |        customerByFirstName {
-        |            "-match": [firstName, "=", customerName]
-        |            "-include": [firstName, lastName, email],
-        |            "addresses": {
-        |                "-include": [street, zipCode]
-        |            }
-        |            "orders": {
-        |                "-include": [id, time, total]
-        |                "products": {
-        |                    "-include": [id, name, price]
-        |                }
-        |            }
-        |        }
-        |    }
-        |}
-        |queryConditions: {
-        |    Customer: [
-        |        ["firstName", "="]
-        |        ["email", "=", "orders.deliveryAddress.street", "="]
-        |    ]
-        |}
-        |```
-        |""".stripMargin)
-    )
-  post(s"/$StargateApiVersion/validate", operation(validateNamespaceDocSwagger)) {
+  post(s"/$StargateApiVersion/validate"){
     http.validateSchemaSize(request.contentLength.getOrElse(-1), maxSchemaSize)
     val input = new String(request.getInputStream.readAllBytes)
     stargate.model.parser.parseModel(input)
   }
 
-  val generateQuerySwagger: SwaggerSupportSyntax.OperationBuilder
-  = (apiOperation[Map[String,Object]]("generateQuery")
-    summary "generate a query from a given endpoint"
-    description "can be used to intelligently and dynamically generate endpoints documentation"
-    parameter pathParam[String]("namespace")
-      .example("namespace")
-      .description("app to generate requests for")
-    parameter pathParam[String]("entityName")
-      .example("Customer")
-      .description("entity to generate requests for")
-    parameter pathParam[String]("op")
-      .example("create")
-      .description("operation that you want the doc for")
-      .allowableValues("create", "delete", "get", "update")
-    )
   get(s"/$StargateApiVersion/api/:namespace/apigen/:entityName/:op"){
     generateQuery(params("namespace"), params("entityName"), params("op"), response)
   }
 
-  val runQuerySwagger: SwaggerSupportSyntax.OperationBuilder
-  = (apiOperation[List[Map[String, Object]]]("runQuery")
-      summary "run predefined query"
-      description "submit predefined queries"
-      parameter queryParam[Map[String, Object]]("payload")
-      .example(
-        """
-          |```
-          |{
-          |        "-match":{
-          |            "customerName": "Steve"
-          |        }
-          |}```
-          |""".stripMargin)
-      .description(
-        """the match parameters for your query. The following query
-          |is searching all customers by the `customerName` of `Steve`
-          |```
-          |{
-          |        "-match":{
-          |            "customerName": "Steve"
-          |        }
-          |}
-          |```
-          |""".stripMargin)
-    parameter headerParam[String]("X-HTTP-Method-Override")
-        .defaultValue("GET")
-    parameter pathParam[String]("namespace")
-        .example("testNS")
-        .description("app to submit query against")
-      parameter pathParam[String]("queryName")
-        .example("customerByFirstName")
-        .description("query key to submit a request against"))
-  /**
-   * Some client may need to use query strings the request because there is a Body
-   */
   get(s"/$StargateApiVersion/api/:namespace/query/stored/:queryName",
-    request.getContentLengthLong < 1L,
-    operation(runQuerySwagger)) {
+    request.getContentLengthLong < 1L){
     namedQueryRunner(params("payload"))
   }
 
-  private def namedQueryRunner(input: String) ={
-    timeRead(() => {
-      val appName = params("namespace")
-      val query = params("queryName")
-      runPredefinedQuery(appName, query, input, response)
-    })
+  private def namedQueryRunner(input: String): Unit ={
+    val appName = params("namespace")
+    val query = params("queryName")
+    runPredefinedQuery(appName, query, input, response)
   }
 
   /**
@@ -345,38 +94,15 @@ class StargateServlet(val sgConfig: ParsedStargateConfig)
     namedQueryRunner(input)
   }
 
-  val entityQuerySwagger: SwaggerSupportSyntax.OperationBuilder
-    = (apiOperation[List[Map[String, Object]]]("entityQuerySwagger")
-    summary "run entity query"
-    description "to query an existing app and entity"
-    parameter queryParam[String]("payload")
-      .description(
-        """Query payload to submit to do searches.
-          |The following example finds all users with the `firstName` of "Steve" and
-          |retrieves all of their orders and addresses:
-          |```
-          |{
-          |    "-match":["firstName","=", "Steve"],
-          |        "addresses":{},
-          |        "orders":{}
-          |}
-          |```
-          |""".stripMargin)
-    parameter pathParam[String]("namespace")
-      .example("testNS")
-      .description("namespace to submit query against")
-    parameter pathParam[String]("entityName")
-      .example("Customer")
-      .description("entity to query against"))
   /**
    * The is for clients that cannot use GET with a Body and instead will pass it in with a queryParameter
    */
   get(s"/$StargateApiVersion/api/:namespace/query/entity/:entityName",
-    request.getContentLengthLong < 1L,
-    operation(entityQuerySwagger)) {
+    request.getContentLengthLong < 1L){
     val payload = util.fromJson(params("payload"))
     runEntityQueryRoute(payload)
   }
+
   private def runEntityQueryRoute(payload: Object): Unit ={
     //TODO get rid of runquery bit
     runQuery(params("namespace"), params("entityName"), "GET", payload, response)
@@ -395,63 +121,11 @@ class StargateServlet(val sgConfig: ParsedStargateConfig)
     runEntityQueryRoute(payload)
   }
 
-  val continueQuerySwagger: SwaggerSupportSyntax.OperationBuilder
-    = (apiOperation[List[Map[String, Object]]]("continueQuery")
-    summary "continue paging through a result set"
-    description "Can continue existing queries by passing an id from a previous query"
-    parameter pathParam[String]("namespace")
-     .example("testNS")
-     .description("app to submit query against")
-    parameter pathParam[String]("id")
-     .example("5ed0b80b-2934-4c58-acba-830d8bce7d13"))
-     .description("id of the original query")
-  get(s"/$StargateApiVersion/api/:namespace/query/continue/:id", operation(continueQuerySwagger)){
-    timeRead(() => {
-      continueQuery(params("namespace"), UUID.fromString(params("id")), response)
-    })
+  get(s"/$StargateApiVersion/api/:namespace/query/continue/:id"){
+    continueQuery(params("namespace"), UUID.fromString(params("id")), response)
   }
 
-  val createQuerySwagger: SwaggerSupportSyntax.OperationBuilder
-  = (apiOperation[Map[String, Object]]("createEntity")
-    summary "add a new record"
-    description "Adds a new entity to the database"
-    parameter bodyParam[String]("payload")
-      .description(
-        """Payload to add a new entity record.
-          |What follows is a new `Customer` named `Steve`:
-          |```
-          |{
-          |        "firstName": "Steve",
-          |        "addresses": {
-          |            "street": "kent st",
-          |            "zipCode":"22046"
-          |        },
-          |        "orders":[
-          |            {
-          |                "time": 12345,
-          |                "products": {
-          |                        "-update": {
-          |                            "-match": ["name", "=", "widget"]
-          |                        }
-          |                }
-          |            },
-          |            {
-          |                "total": 0,
-          |                "products": {
-          |                        "-create": []
-          |                }
-          |            }
-          |        ]
-          |    }
-          |```
-          |""".stripMargin)
-    parameter pathParam[String]("namespace")
-      .example("testNS")
-      .description("namespace to submit query against")
-    parameter pathParam[String]("entityName")
-      .example("Customer")
-      .description("entity to query against"))
-  post(s"/$StargateApiVersion/api/:namespace/query/entity/:entityName", operation(createQuerySwagger)) {
+  post(s"/$StargateApiVersion/api/:namespace/query/entity/:entityName"){
     //TODO move validation to filter
     http.validateMutation("POST", request.contentLength.getOrElse(-1), maxMutationSize)
     val input = new String(request.getInputStream.readAllBytes)
@@ -460,33 +134,7 @@ class StargateServlet(val sgConfig: ParsedStargateConfig)
     runQuery(params("namespace"), params("entityName"), "POST", payload, response)
   }
 
-  val updateQuerySwagger: SwaggerSupportSyntax.OperationBuilder
-  = (apiOperation[Map[String, Object]]("updateEntity")
-    summary "update records"
-    description "Update records specified in the match criteria by the -update values specified"
-    parameter bodyParam[String]("payload")
-    .description(
-      """match arguments to find records to update and the update value to apply.
-        |What follows is an example with where all users with the firstName of steve
-        |are given the street address of "other st":
-        |
-        |```
-        |{
-        |        "-match":["firstName","=","Steve"],
-        |        "lastName": "Danger",
-        |        "addresses":{
-        |            "-update":{
-        |                "-match":["customers.firstName","=","Steve"],
-        |                "street":"other st"}}
-        |```
-        |""".stripMargin)
-    parameter pathParam[String]("namespace")
-      .example("namespace")
-      .description("namespace to submit query against")
-    parameter pathParam[String]("entityName")
-      .example("Customer")
-      .description("entity to query against"))
-  put(s"/$StargateApiVersion/api/:namespace/query/entity/:entityName", operation(updateQuerySwagger)){
+  put(s"/$StargateApiVersion/api/:namespace/query/entity/:entityName"){
     //TODO move validation to filter
     http.validateMutation("PUT", request.contentLength.getOrElse(-1), maxMutationSize)
     val input = new String(request.getInputStream.readAllBytes)
@@ -495,54 +143,7 @@ class StargateServlet(val sgConfig: ParsedStargateConfig)
     runQuery(params("namespace"), params("entityName"), "PUT", payload, response)
   }
 
-  val deleteQuerySwagger: SwaggerSupportSyntax.OperationBuilder
-  = (apiOperation("deleteEntity")
-    summary "deletes a new record"
-    description "Removes documents by id"
-    parameter bodyParam[String]("payload")
-    .description(
-      """Payload to delete documents that match the criteria.
-        |This for example will delete several documents by id
-        |```
-        |{
-        |    "-match": [
-        |        "customer.id",
-        |        "=",
-        |        "65e4908f-dc12-4997-bbc5-4e9500a0136c",
-        |        "time",
-        |        "=",
-        |        705299721,
-        |        "id",
-        |        "=",
-        |        "dec0870f-7dfe-4b4e-af95-552c4484e504"
-        |    ]
-        |}
-        |```
-        |The follow document recuses and deletes related products as well
-        |```
-        |{
-        |    "-match": [
-        |        "customer.id",
-        |        "=",
-        |        "65e4908f-dc12-4997-bbc5-4e9500a0136c",
-        |        "time",
-        |        "=",
-        |        705299721,
-        |        "id",
-        |        "=",
-        |        "dec0870f-7dfe-4b4e-af95-552c4484e504"
-        |    ],
-        |    "products": {}
-        |}
-        |```
-        |""".stripMargin)
-    parameter pathParam[String]("namespace")
-    .example("testNS")
-    .description("app to submit query against")
-    parameter pathParam[String]("entityName")
-     .example("Customer")
-     .description("entity to query against"))
-  delete(s"/$StargateApiVersion/api/:namespace/query/entity/:entityName", operation(deleteQuerySwagger)){
+  delete(s"/$StargateApiVersion/api/:namespace/query/entity/:entityName"){
     //TODO move validation to filter
     http.validateMutation("DELETE", request.contentLength.getOrElse(-1), maxMutationSize)
     val input = new String(request.getInputStream.readAllBytes)
@@ -560,7 +161,6 @@ class StargateServlet(val sgConfig: ParsedStargateConfig)
   def postSchema(
                   appName: String,
                   input: String,
-                  resp: HttpServletResponse
                 ): Unit = {
     val model = stargate.schema.outputModel(stargate.model.parser.parseModel(input), appName)
     val previousDatamodel = util.await(datamodelRepository.fetchLatestDatamodel(appName, datamodelRepoTable, cqlSession, executor)).get
@@ -576,18 +176,19 @@ class StargateServlet(val sgConfig: ParsedStargateConfig)
   }
   def deleteSchema(appName: String, resp: HttpServletResponse): Unit = {
     logger.info(s"""deleting datamodels and keyspace for app "$appName" """)
-    val removed = apps.remove(appName)
+    val removed = this.apps.remove(appName)
     util.await(datamodelRepository.deleteDatamodel(appName, datamodelRepoTable, cqlSession, executor)).get
     cassandra.wipeKeyspace(cqlSession, appName)
     if(removed == null) {
       resp.setStatus(404)
     }
   }
+
   def generateQuery(appName: String, entity: String, op: String, resp: HttpServletResponse): Unit = {
     val model = lookupModel(appName)
-    require(model.input.entities.contains(entity), s"""database "${appName}" does not have an entity named "${entity}" """)
+    require(model.input.entities.contains(entity), s"""database "$appName" does not have an entity named "$entity" """)
     val validOps = Set("create", "get", "update", "delete")
-    require(validOps.contains(op), s"operation ${op} must be one of the following: ${validOps}")
+    require(requirement = validOps.contains(op), message = s"operation $op must be one of the following: $validOps")
     val requestF = op match {
       case "create" => generator.specificCreateRequest(model, entity, cqlSession, executor)
       case "get" => generator.specificGetRequest(model, entity, 3, cqlSession, executor)
@@ -597,6 +198,7 @@ class StargateServlet(val sgConfig: ParsedStargateConfig)
     val request = util.await(requestF).get
     resp.getWriter.write(util.toJson(request))
   }
+
   def runPredefinedQuery(
                           appName: String,
                           queryName: String,
@@ -695,30 +297,5 @@ class StargateServlet(val sgConfig: ParsedStargateConfig)
     logger.trace(op, Await.result(result, Duration.Inf))
     resp.getWriter.write(util.toJson(Await.result(result, Duration.Inf)))
   }
-/**
-  def route(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
-    try {
-      val contentLength = req.getContentLengthLong
-      http.validateRequestSize(contentLength, maxRequestSize)
-      val op = req.getMethod
-      path match {
-
-        case _ =>
-          countError()
-          resp.setStatus(HttpServletResponse.SC_NOT_FOUND)
-          val msg = s"path: $path does not match /:appName/:entity/:id pattern"
-          rateLimitedLog.warn(msg)
-          resp.getWriter.write(util.toJson(msg))
-      }
-    } catch {
-      case e: Exception =>
-        countError()
-        rateLimitedLog.error(s"exception: $e")
-        resp.setStatus(HttpServletResponse.SC_BAD_GATEWAY)
-        resp.getWriter.write(util.toJson(e.getMessage))
-    }
-  }
- TODO add filters to replace the validation and error counters
- */
 }
 

@@ -9,10 +9,10 @@ import org.eclipse.jetty.servlet.{DefaultServlet, ServletHolder}
 import org.eclipse.jetty.webapp.WebAppContext
 import org.scalatra.servlet.ScalatraListener
 import stargate.service.ParsedStargateConfig
+import org.eclipse.jetty.server.Server
 
 object Main {
   private val logger = Logger("main")
-  private val sgVersion = "0.1.0"
 
   def logStartup() = {
     logger.info("Launch Mission To StarGate")
@@ -44,7 +44,7 @@ object Main {
     logger.info("0000     0000")
     logger.info("00000   00000")
     logger.info("============  ")
-    logger.info(s"StarGate Version: $sgVersion")
+    logger.info(s"""StarGate Version: ${stargate.service.StargateVersion}""")
   }
   private def mapConfig(config: Config): ParsedStargateConfig = {
     ParsedStargateConfig(
@@ -63,9 +63,8 @@ object Main {
   }
 
   def main(args: Array[String]) = {
-    metrics.registerJVMMetrics()
     val parser = new scopt.OptionParser[Params]("stargate-server") {
-      head("stargate-server", sgVersion)
+      head("stargate-server", stargate.service.StargateVersion)
       opt[String]('c', "conf")
         .optional()
         .action((x, c) => c.copy(conf = x))
@@ -84,25 +83,18 @@ object Main {
     else ConfigFactory.parseFile(new File(appConf)).resolve())
     val parsedConfig = mapConfig(config)
     ParsedStargateConfig.globalConfig = parsedConfig
+    
+    val server = new Server(parsedConfig.httpPort)
+    val context = new WebAppContext()
+    context setContextPath "/"
+    context.setResourceBase("src/main/webapp")
+    context.addEventListener(new ScalatraListener)
+    context.setInitParameter(ScalatraListener.LifeCycleKey, "stargate.service.ScalatraBootstrap")
+    //do not add servlets here..make ScalatraServlets and place in stargate.service.ScalaBootstrap
+    context.addServlet(classOf[DefaultServlet], "/")
 
-    val server = new org.eclipse.jetty.server.Server(parsedConfig.httpPort)
-    val handler = new WebAppContext()
-    handler.setContextPath("/")
-    handler.setResourceBase("src/main/resources/webapp")
-    //wires up scalatra
-    handler.addEventListener(new ScalatraListener())
-    handler.setInitParameter(ScalatraListener.LifeCycleKey, "stargate.service.ScalatraBootstrap")
-    handler.addServlet(classOf[DefaultServlet], "/swagger/*")
-    //expose the MetricsServlet to the /metrics endpoint. To scrape metrics for Prometheus now you just need to point to the appropriate host and port combination
-    //ie http://localhost:8080/metrics
-    handler.addServlet(
-      new ServletHolder(new MetricsServlet()),
-      s"/${stargate.service.StargateApiVersion}/metrics"
-    );
-    server.setHandler(handler)
-    //has to be the last set handler, will wrap existing handler
-    //note this will mean that metrics calls will be counted as well in the total request count
-    metrics.registerServletHandlerStatistics(server)
+    server.setHandler(context)
+
     logStartup()
     server.start
     server.join

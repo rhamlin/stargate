@@ -44,3 +44,5 @@ venv
 .project
 .settings
 stargate-clone*
+src/main/.DS_Store
+src/.DS_Store

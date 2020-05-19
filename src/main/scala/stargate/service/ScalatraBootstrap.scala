@@ -18,11 +18,21 @@ package stargate.service
 
 import javax.servlet.ServletContext
 import org.scalatra.LifeCycle
+import org.scalatra.metrics.MetricsBootstrap
+import stargate.cassandra
+import com.datastax.oss.driver.api.core.CqlSession
 
-class ScalatraBootstrap extends LifeCycle {
-  implicit val swagger = new StargateSwagger
+class ScalatraBootstrap 
+extends LifeCycle 
+with MetricsBootstrap 
+with CqlSupport{
+
   override def init(context: ServletContext) {
-    context.mount (new StargateServlet(ParsedStargateConfig.globalConfig), "/*")
-    context.mount (new ResourcesApp,s"/$StargateApiVersion/api-docs")
+    val sgConfig: ParsedStargateConfig = ParsedStargateConfig.globalConfig
+    val cqlSession: CqlSession = cassandra.session(sgConfig.cassandraContactPoints, sgConfig.cassandraDataCenter)
+    val datamodelRepoTable: cassandra.CassandraTable = createDatamodelRepoTable(sgConfig, cqlSession)
+    val namespaces = new Namespaces(datamodelRepoTable, cqlSession)
+    context.mount (new StargateServlet(sgConfig, cqlSession, namespaces, datamodelRepoTable), "/*")
+    context.mount (new SwaggerServlet(namespaces),"/api-docs")
   }
 }

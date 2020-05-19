@@ -9,10 +9,10 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 FROM openjdk:11-jdk-slim
-
+ARG SG_VERSION
 COPY ./target ./stargate
 WORKDIR ./stargate
 
 RUN cp ./classes/logback-prod.xml ./classes/logback.xml
 
-CMD ["java", "-jar", "./stargate-0.1.0-SNAPSHOT.jar"]
+CMD ["java", "-jar", "./stargate-$SG_VERSION.jar"]
