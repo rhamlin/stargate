@@ -12,7 +12,7 @@ FROM openjdk:11-jdk-slim
 ARG SG_VERSION
 COPY ./target ./stargate
 WORKDIR ./stargate
-
+ENV SGV ${SG_VERSION}
 RUN cp ./classes/logback-prod.xml ./classes/logback.xml
 
-CMD ["java", "-jar", "./stargate-$SG_VERSION.jar"]
+CMD ["sh", "-c", "java -jar ./stargate-${SGV}.jar"]
