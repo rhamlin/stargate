@@ -13,17 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package stargate.service
+package stargate.cassandra
 
-import com.datastax.oss.driver.api.core.CqlSession
-import stargate.cassandra.CassandraTable
-import stargate.service.config.ParsedStargateConfig
-import stargate.util
-
-import scala.concurrent._
-
-trait CqlSupport {
-  def createDatamodelRepoTable(sgConfig: ParsedStargateConfig, cqlSession: CqlSession): CassandraTable = {
-    util.await(datamodelRepository.ensureRepoTableExists(sgConfig.stargateKeyspace, sgConfig.cassandraReplication, cqlSession, ExecutionContext.global)).get
+/**
+  * 
+  *
+  * @param partitionKeys list of CassandraColumn that match to the partition key in an actual Apache Cassandra table.
+  * @param clusteringKeys list of clustering keys that match to the clustering columns in an actual Apache Cassandra table.
+  */
+final case class CassandraKey(partitionKeys: List[CassandraColumn], clusteringKeys: List[CassandraColumn]) {
+    def names: CassandraKeyNames = CassandraKeyNames(partitionKeys.map(_.name), clusteringKeys.map(_.name))
+    def combined: List[CassandraColumn] = (partitionKeys ++ clusteringKeys)
   }
-}

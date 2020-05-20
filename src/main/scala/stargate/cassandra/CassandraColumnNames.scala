@@ -13,17 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package stargate.service
+package stargate.cassandra
 
-import com.datastax.oss.driver.api.core.CqlSession
-import stargate.cassandra.CassandraTable
-import stargate.service.config.ParsedStargateConfig
-import stargate.util
-
-import scala.concurrent._
-
-trait CqlSupport {
-  def createDatamodelRepoTable(sgConfig: ParsedStargateConfig, cqlSession: CqlSession): CassandraTable = {
-    util.await(datamodelRepository.ensureRepoTableExists(sgConfig.stargateKeyspace, sgConfig.cassandraReplication, cqlSession, ExecutionContext.global)).get
+final case class CassandraColumnNames(key: CassandraKeyNames, data: List[String]) {
+    def combined: List[String] = key.combined ++ data
   }
-}

@@ -24,6 +24,8 @@ import com.typesafe.scalalogging.Logger
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.util.{Random, Try}
+import stargate.service.config.ParsedStargateConfig
+import scala.io.Source
 
 trait CassandraTestSession {
   def session: CqlSession
@@ -41,33 +43,66 @@ trait CassandraTest {
   var session: CqlSession = null
   val keyspaces: ConcurrentSkipListSet[String] = new java.util.concurrent.ConcurrentSkipListSet[String]()
   var alreadyRunning: Boolean = true
-
+  
   // make this @BeforeClass for any tests that depend on casssandra
   def ensureCassandraRunning(): Unit = {
-    val local = Try(cassandra.session(contacts, dataCenter))
-    val persistentDseContainer = "test-cassandra"
+    val username = "cassandra"
+    val password = "cassandra"
+    val authProvider = "PlainTextAuthProvider"
+    var parsedStargateConfig = new ParsedStargateConfig(
+      8080,
+      100,
+      100,
+      32000L,
+      32000L,
+      32000L,
+      contacts,
+      dataCenter,
+      1,
+      "test-cassandra",
+      authProvider,
+      username,
+      password,
+    )
+    val persistentDseContainer = "stargate-tests-cassandra"
     lazy val localDocker = Try(Integer.parseInt(util.process.exec(List("docker", "port", persistentDseContainer, "9042")).get.split(":")(1).trim))
-    if(local.isSuccess) {
-      local.get.close
-      logger.info("using already running cassandra instance for test")
-      alreadyRunning = true
-    } else if(localDocker.isSuccess) {
+    if(localDocker.isSuccess) {
       logger.info("using already running docker-cassandra instance for test: {}", localDocker.get)
       contacts = List(("localhost", localDocker.get))
       alreadyRunning = true
     } else {
       val image = "cassandra:3.11.6"
-      val start = util.process.exec(List("docker", "run", "--name", dockerId, "-d", "-P", image)).get
+      val yamlFile = getClass().getResource("/cassandra.yaml").getFile().replace("/C:", "") //hack on windows
+      logger.info(s"yaml file located is $yamlFile")
+      val create = util.process.exec(List("docker", "create", "--name", dockerId, "-P", image)).get
+      val copy = util.process.exec(List("docker", "cp", yamlFile, s"$dockerId:/etc/cassandra/")).get
+      val start = util.process.exec(List("docker", "start", dockerId)).get
       logger.warn(s"""starting cassandra docker container for test: ${dockerId})
         |    this can take nearly a minute to start, so it's generally faster to: 1) run cassandra in the background on port 9042, or
         |    2) run docker with name ${persistentDseContainer} with the following command:
         |    docker run -d -P --name ${persistentDseContainer} ${image}""".stripMargin)
       val port =  Integer.parseInt(util.process.exec(List("docker", "port", dockerId, "9042")).get.split(":")(1).trim)
+      logger.warn(s"port to connect to is $port")
       contacts = List(("localhost", port))
-      util.retry(cassandra.session(contacts, dataCenter), Duration.apply(60, TimeUnit.SECONDS), Duration.apply(5, TimeUnit.SECONDS)).get
+      parsedStargateConfig = new ParsedStargateConfig(
+          parsedStargateConfig.httpPort,
+          parsedStargateConfig.defaultTTL,
+          parsedStargateConfig.defaultLimit,
+          parsedStargateConfig.maxSchemaSizeKB,
+          parsedStargateConfig. maxRequestSizeKB,
+          parsedStargateConfig.maxMutationSizeKB,
+          List(("localhost", port)),
+          parsedStargateConfig.cassandraDataCenter,
+          parsedStargateConfig.cassandraReplication,
+          parsedStargateConfig.stargateKeyspace,
+          parsedStargateConfig.cassandraAuthProvider,
+          parsedStargateConfig.cassandraUserName,
+          parsedStargateConfig.cassandraPassword
+      )
+      util.retry(cassandra.session(parsedStargateConfig), Duration.apply(60, TimeUnit.SECONDS), Duration.apply(5, TimeUnit.SECONDS)).get
       alreadyRunning = false
     }
-    session = cassandra.session(contacts, dataCenter)
+    session = cassandra.session(parsedStargateConfig)
   }
 
   // make this @AfterClass for any tests that depend on cassandra
@@ -94,6 +129,5 @@ trait CassandraTest {
     logger.info(s"cleaning up keyspace ${keyspace}: ${wiped.toString}")
     ()
   }
-
 }
 

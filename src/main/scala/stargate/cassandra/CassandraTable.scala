@@ -13,17 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package stargate.service
+package stargate.cassandra
 
-import com.datastax.oss.driver.api.core.CqlSession
-import stargate.cassandra.CassandraTable
-import stargate.service.config.ParsedStargateConfig
-import stargate.util
-
-import scala.concurrent._
-
-trait CqlSupport {
-  def createDatamodelRepoTable(sgConfig: ParsedStargateConfig, cqlSession: CqlSession): CassandraTable = {
-    util.await(datamodelRepository.ensureRepoTableExists(sgConfig.stargateKeyspace, sgConfig.cassandraReplication, cqlSession, ExecutionContext.global)).get
-  }
-}
+/**
+  * 
+  *
+  * @param keyspace name that maps to keyspace where the table is located
+  * @param name name that maps to actual Apache Cassandra table
+  * @param columns columns that map to the actual table
+  */
+final case class CassandraTable(keyspace: String, name: String, columns: CassandraColumns)

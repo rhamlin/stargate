@@ -13,14 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package stargate.service
+package stargate.service.config
 
 import scala.beans.BeanProperty
+import com.datastax.oss.driver.api.core.auth.AuthProvider
+import com.datastax.oss.driver.internal.core.auth.PlainTextAuthProvider
+import com.datastax.oss.driver.api.core.context.DriverContext
 
 object ParsedStargateConfig{
   var globalConfig: ParsedStargateConfig = _
 }
-case class ParsedStargateConfig(
+final case class ParsedStargateConfig(
                                  @BeanProperty val httpPort: Int,
                                  @BeanProperty val defaultTTL: Int,
                                  @BeanProperty val defaultLimit: Int,
@@ -30,5 +33,8 @@ case class ParsedStargateConfig(
                                  @BeanProperty val cassandraContactPoints: List[(String, Int)],
                                  @BeanProperty val cassandraDataCenter: String,
                                  @BeanProperty val cassandraReplication: Int,
-                                 @BeanProperty val stargateKeyspace: String
-                               )
+                                 @BeanProperty val stargateKeyspace: String,
+                                 @BeanProperty val cassandraAuthProvider: String,
+                                 @BeanProperty val cassandraUserName: String,
+                                 @BeanProperty val cassandraPassword: String
+)

@@ -8,7 +8,7 @@ import io.prometheus.client.exporter.MetricsServlet
 import org.eclipse.jetty.servlet.{DefaultServlet, ServletHolder}
 import org.eclipse.jetty.webapp.WebAppContext
 import org.scalatra.servlet.ScalatraListener
-import stargate.service.ParsedStargateConfig
+import stargate.service.config.ParsedStargateConfig
 import org.eclipse.jetty.server.Server
 
 object Main {
@@ -58,7 +58,10 @@ object Main {
         .split(",").map(_.split(":")).map(hp => (hp(0), Integer.parseInt(hp(1)))).toList,
       config.getString("cassandra.dataCenter"),
       config.getInt("cassandra.replication"),
-      config.getString("stargateKeyspace")
+      config.getString("stargateKeyspace"),
+      config.getString("cassandra.username"),
+      config.getString("cassandra.password"),
+      config.getString("cassandra.authProvider"),
     )
   }
 

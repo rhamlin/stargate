@@ -31,6 +31,7 @@ import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Futu
 import scala.util.Try
 import com.datastax.oss.driver.api.core.CqlSession
 import stargate.cassandra.CassandraTable
+import stargate.service.config.ParsedStargateConfig
 import com.typesafe.scalalogging.LazyLogging
 
 class StargateServlet(val sgConfig: ParsedStargateConfig,

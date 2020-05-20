@@ -19,6 +19,7 @@ package stargate.service
 import javax.servlet.ServletContext
 import org.scalatra.LifeCycle
 import org.scalatra.metrics.MetricsBootstrap
+import stargate.service.config.ParsedStargateConfig
 import stargate.cassandra
 import com.datastax.oss.driver.api.core.CqlSession
 
@@ -29,7 +30,7 @@ with CqlSupport{
 
   override def init(context: ServletContext) {
     val sgConfig: ParsedStargateConfig = ParsedStargateConfig.globalConfig
-    val cqlSession: CqlSession = cassandra.session(sgConfig.cassandraContactPoints, sgConfig.cassandraDataCenter)
+    val cqlSession: CqlSession = cassandra.session(sgConfig)
     val datamodelRepoTable: cassandra.CassandraTable = createDatamodelRepoTable(sgConfig, cqlSession)
     val namespaces = new Namespaces(datamodelRepoTable, cqlSession)
     context.mount (new StargateServlet(sgConfig, cqlSession, namespaces, datamodelRepoTable), "/*")
