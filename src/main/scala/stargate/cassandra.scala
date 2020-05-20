@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package stargate 
 
 import java.net.InetSocketAddress
@@ -31,11 +30,79 @@ import scala.jdk.CollectionConverters._
 import scala.jdk.FutureConverters._
 import stargate.service.config.ParsedStargateConfig
 import com.typesafe.scalalogging.LazyLogging
+import com.datastax.oss.driver.api.core.`type`.DataType
 
 /**
   * provides most of the cassandra query methods and schema modification support
   */
-package object cassandra extends LazyLogging {
+object cassandra extends LazyLogging {
+
+/**
+  * 
+  *
+  * @param name name of the column
+  * @param type cassandra data type that is in use
+  */
+final case class CassandraColumn(name: String, `type`: DataType)
+
+final case class CassandraColumnNames(key: CassandraKeyNames, data: List[String]) {
+    def combined: List[String] = key.combined ++ data
+  }
+
+/**
+  * 
+  *
+  * @param partitionKeys list of CassandraColumn that match to the partition key in an actual Apache Cassandra table.
+  * @param clusteringKeys list of clustering keys that match to the clustering columns in an actual Apache Cassandra table.
+  */
+final case class CassandraKey(partitionKeys: List[CassandraColumn], clusteringKeys: List[CassandraColumn]) {
+    def names: CassandraKeyNames = CassandraKeyNames(partitionKeys.map(_.name), clusteringKeys.map(_.name))
+    def combined: List[CassandraColumn] = (partitionKeys ++ clusteringKeys)
+  }
+
+/**
+  * 
+  *
+  * @param partitionKeys list of CassandraColumn that match to the partition key in an actual Apache Cassandra table.
+  * @param clusteringKeys list of clustering keys that match to the clustering columns in an actual Apache Cassandra table.
+  */
+final  case class CassandraKeyNames(partitionKeys: List[String], clusteringKeys: List[String]) {
+    def combined: List[String] = (partitionKeys ++ clusteringKeys)
+}
+
+/**
+  * 
+  *
+  * @param key 
+  * @param data
+  */
+final case class CassandraColumns(key: CassandraKey, data: List[CassandraColumn]) {
+    def names: CassandraColumnNames = CassandraColumnNames(key.names, data.map(_.name))
+    def combined: List[CassandraColumn] = key.combined ++ data
+  }
+
+/**
+  * 
+  *
+  * @param keyspace name that maps to keyspace where the table is located
+  * @param name name that maps to actual Apache Cassandra table
+  * @param columns columns that map to the actual table
+  */
+final case class CassandraTable(keyspace: String, name: String, columns: CassandraColumns)
+
+/**
+  * 
+  *
+  * @param missingColumns
+  * @param missingKeys
+  * @param missingPartitionKeys
+  * @param skipped
+  */
+final case class KeyConditionScore(missingColumns: Int, missingKeys: Int, missingPartitionKeys: Boolean, skipped: Int) extends Ordered[KeyConditionScore] {
+    def perfect: Boolean = (missingColumns + missingKeys + skipped) == 0 && !missingPartitionKeys
+    def tuple: (Int, Int, Boolean, Int) = (missingColumns, missingKeys, missingPartitionKeys, skipped)
+    override def compare(that: KeyConditionScore): Int = Ordering[(Int,Int,Boolean,Int)].compare(this.tuple, that.tuple)
+  }
   val schemaOpTimeout: java.time.Duration = java.time.Duration.ofSeconds(10)
   type PagedResults[T] = AsyncList[T]
 
