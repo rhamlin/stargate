@@ -114,7 +114,7 @@ var startDevCmd = &cobra.Command{
 			CassandraURL:    "stargate-cassandra",
 			ExposedPorts:    []string{"8080"},
 			DockerImageHost: "docker.io/",
-			ImageName:       "service",
+			ImageName:       "datastax/stargate",
 		})
 
 		if err != nil {
