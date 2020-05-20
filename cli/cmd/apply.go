@@ -23,13 +23,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func SchemaUrl(url string, name string) string {
+    return url+"/v1/api/"+name+"/schema"
+}
+
 // Apply sends a schema to server and print output for a user
 func Apply(cmd *cobra.Command, name, path, url string) error {
 	if url == "" {
 		url = upload.Host
 	}
 
-	return upload.Upload(path, url+"/"+name)
+	return upload.Upload(path, SchemaUrl(url, name))
 }
 
 // ApplyWithLog sends a schema to server and print output for a user
@@ -40,7 +44,7 @@ func ApplyWithLog(cmd *cobra.Command, name, path, url string) error {
 		cmd.PrintErrln("Failed to apply schema!")
 		cmd.PrintErrln(err.Error())
 	} else {
-		endpointURL := purell.MustNormalizeURLString(url+"/"+name, purell.FlagsUnsafeGreedy)
+		endpointURL := purell.MustNormalizeURLString(SchemaUrl(url, name), purell.FlagsUnsafeGreedy)
 		cmd.Println("Endpoint created at", endpointURL)
 	}
 	return err

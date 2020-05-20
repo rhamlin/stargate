@@ -16,6 +16,7 @@ package docker
 
 import (
 	"errors"
+	"fmt"
 	"os/exec"
 	"strings"
 
@@ -46,7 +47,9 @@ func (client *Client) GetNameWithVersion(image string) (string, error) {
 
 // EnsureImage makes sure that the image we need is present and returns the correct name
 func (client *Client) EnsureImage(dockerHost, image string) (string, error) {
-	pullCmd := exec.Command("docker", "pull", dockerHost+image+":latest")
+    fullImage := dockerHost+image+":latest"
+    fmt.Println("Pulling image:", fullImage)
+	pullCmd := exec.Command("docker", "pull", fullImage)
 	_, err := pullCmd.CombinedOutput()
 	if err != nil {
 		return "", err

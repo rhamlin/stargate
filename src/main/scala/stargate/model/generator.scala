@@ -33,6 +33,7 @@ object generator {
 
   def randomScalar(`type`: ScalarType.Value): Object = {
     `type` match {
+      case ScalarType.BOOLEAN => java.lang.Boolean.valueOf(Random.nextBoolean())
       case ScalarType.INT => Random.nextInt.asInstanceOf[Object]
       case ScalarType.FLOAT => Random.nextFloat.asInstanceOf[Object]
       case ScalarType.STRING => Random.alphanumeric.take(10).mkString.asInstanceOf[Object]
