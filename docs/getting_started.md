@@ -4,7 +4,7 @@ Getting a microservice and cassandra off the ground can be a big task. Stargate 
 
 Prerequisites: You must have **docker** to use stargate locally.
 
-1. Create your schema
+1. Create an example schema configuration file
     ```
     echo 'entities {
       Todo {
@@ -16,31 +16,36 @@ Prerequisites: You must have **docker** to use stargate locally.
     }
     queryConditions: {
       Todo: [
+        ["todo", "="]
       ]
     }' > stargate.conf
     ```
-2. Install and Start Stargate
-    - <a name="tempworkflow">temporary workflow</a>, we know this is suboptimal   
-        * make sure you are part of the datastax organization on dockerhub and login with: `docker login --username $DOCKER_USERNAME`
-        * `./localstack.sh` from the repo root to start cassandra and stargate docker containers
-        * `stargateIp=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' stargate)` to get the ip of the container
-        * `curl "${stargateIp}:8080/myNamespace" -H "content-type: application/hocon" --data-binary "@./stargate.conf"` to create a db named 'myNamespace'
+
+2. Download the stargate CLI from [https://github.com/datastax/stargate/releases] to your current working directory and run
+```sh
+tar -xzf ./stargate*.tar.gz
+./stargate service start --with-cassandra 
+./stargate apply myNamespace stargate.conf
+```
+to start up local cassandra and stargate instances, creating a schema `myNamespace` from the configuration in step 1.
+   
     
 3. Query the database
 
 Create a Todo:
 ```sh
-curl -X POST http://${stargateIp}:8080/myNamespace/Todo -H "content-type: application/json" -d'
+curl -X POST http://localhost:8080/v1/api/myNamespace/query/entity/Todo -H "content-type: application/json" -d'
 { 
  "todo": "Get stargate running",
  "isComplete": false
 }
-'
+' > ./createResponse.out
+cat ./createResponse.out
 ```
 
 Get todos:
 ```sh
-curl -X GET http://${stargateIp}:8080/myNamespace/Todo -H "content-type: application/json" -d'
+curl -X GET http://localhost:8080/v1/api/myNamespace/query/entity/Todo -H "content-type: application/json" -d'
 { 
  "-match": "all"
 }
@@ -49,10 +54,10 @@ curl -X GET http://${stargateIp}:8080/myNamespace/Todo -H "content-type: applica
 
 Update todo:
 ```sh
-# replace "ce955224-1e85-41d8-946f-12ad201b83b9" with whichever entity you want to modify
-curl -X PUT http://${stargateIp}:8080/myNamespace/Todo -H "content-type: application/json" -d'
+todoId=$(cat ./createResponse.out | jq -r .[0].entityId)
+curl -X PUT http://localhost:8080/v1/api/myNamespace/query/entity/Todo -H "content-type: application/json" -d'
 { 
- "-match": ["entityId", "=", "ce955224-1e85-41d8-946f-12ad201b83b9"],
+ "-match": ["entityId", "=", "'"${todoId}"""'"],
  "isComplete": true
 }
 '

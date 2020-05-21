@@ -38,24 +38,24 @@ Stargate has several primitive types.
 
 | Type | Description |
 |------|-------------|
-| ASCII_STRING | US-ASCII character string |
-LONG | 64-bit signed long |
-| BLOB | Arbitrary bytes (no validation), expressed as hexadecimal |
-| BOOLEAN | true or false | 
-| DATE | Value is a date with no corresponding time value; Cassandra encodes date as a 32-bit integer representing days since epoch (January 1, 1970). Dates can be represented in queries and inserts as a string, such as 2015-05-03 (yyyy-mm-dd)
-| DECIMAL | Variable-precision decimal |
-| DOUBLE | 64-bit IEEE-754 floating point |
-| FLOAT | 32-bit IEEE-754 floating point |
-| INT | 32-bit signed integer |
-| SHORT | 2 byte integer | 
-| STRING | UTF-8 encoded string | 
-| TIME | Value is encoded as a 64-bit signed integer representing the number of nanoseconds since midnight. Values can be represented as strings, such as 13:30:54.234. | 
-| TIMESTAMP | Date and time with millisecond precision, encoded as 8 bytes since epoch. Can be represented as a string, such as 2015-05-03 13:30:54.234. |
-| UUID | A UUID in standard UUID format | 
-| BIG_INT | Arbitrary-precision integer |
+| ascii_string | US-ASCII character string |
+| long | 64-bit signed long |
+| blob | Arbitrary bytes (no validation), expressed as hexadecimal |
+| boolean | true or false | 
+| date | Value is a date with no corresponding time value; Cassandra encodes date as a 32-bit integer representing days since epoch (January 1, 1970). Dates can be represented in queries and inserts as a string, such as 2015-05-03 (yyyy-mm-dd)
+| decimal | Variable-precision decimal |
+| double | 64-bit IEEE-754 floating point |
+| float | 32-bit IEEE-754 floating point |
+| int | 32-bit signed integer |
+| short | 2 byte integer | 
+| string | UTF-8 encoded string | 
+| time | Value is encoded as a 64-bit signed integer representing the number of nanoseconds since midnight. Values can be represented as strings, such as 13:30:54.234. | 
+| timestamp | Date and time with millisecond precision, encoded as 8 bytes since epoch. Can be represented as a string, such as 2015-05-03 13:30:54.234. |
+| uuid | A UUID in standard UUID format | 
+| big_int | Arbitrary-precision integer |
 
 ## Relations Block
-The relations block describes the relationship between entities. These will manifest as fields on the json input/output structures. Relations are an easy way to create graph-like traversals in your queries. The relations block is **required** on all entities but it can be empty.
+The relations block describes the relationship between entities. These will manifest as fields on the json input/output structures. Relations are an easy way to create graph-like traversals in your queries.
 
 ```
  relations {
@@ -63,14 +63,14 @@ The relations block describes the relationship between entities. These will mani
         }
 ```
 ### Cardinality
-All relations have the cardinality of many-to-many. Cardinality can be enforced by the user by judicious use of match statements.
+All relations have the cardinality of many-to-many. Constraints like to-one relations can be achieved by only updating the relation with a replace-operation and supplying only a single child entity.
 ### Type
 The type statement refers to the entity that it will connect to. This is similar to a ‘data type’ for the field. This can be any valid entity.
 ### Inverse
 Inverses are a way to bidirectionally traverse between two entities. Simply, the inverse statement is the field that it maps to. There must be an accompanying relation field in the inverse’s relations section that indicates which entity this ‘links’ to. 
 
 ## Query Conditions Block
-Query conditions are a list of all possible partial predicates that are allowable in an entity. It has the format of a literal followed by the comparison. 
+Query conditions are a list of all predicates that are indexed when querying an entity. It has the format of a literal followed by the comparison. 
 
 For example, the following block has the following SQL analogs: `where user.username = ?` and `where isComplete = ? AND user.username = ?`.
 ```
@@ -115,7 +115,7 @@ The match statement must match in its entirety to a statement in the Query Condi
 ### Literals
 The match statement may contain a literal. The literal must match the data type of the field it is  referring to.
 ### Variables
-Every third argument in the match statement is a variable. In the example above, it is the 'customerName' These are specified at query time with a `-matchArguments` parameter.
+Every third argument in the match statement is a variable. In the example above, it is the 'customerName' These are specified at query time with a `-match` parameter.
 ### Include Statement
 The include statement states which fields need to be included in the resulting json. Only fields on that entity are supported.
 ### Relationships
