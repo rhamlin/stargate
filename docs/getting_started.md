@@ -2,7 +2,7 @@
 
 Getting a microservice and cassandra off the ground can be a big task. Stargate makes this as easy as three steps.
 
-**Prerequisites**: You must have `docker` installed to use stargate locally.
+**Prerequisites**: You must have `docker` installed to run stargate locally.
 The last example uses `jq` to parse JSON responses on the command line - you can install this from brew on mac OS,
 or from your package manager on Linux.
 Minimal testing has been done on Windows, so it is currently unsupported.

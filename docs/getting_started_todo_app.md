@@ -6,25 +6,26 @@ This tutorial will walk you through specifying a data model and defining access 
 
 ##### What you need
 
-You will need both docker and the stargate CLI to run stargate locally.
-You can download the stargate CLI from https://github.com/datastax/stargate/releases and then unzip it to your current working directory.
+You will need both `docker` and the stargate CLI to run stargate locally.
+To download the stargate CLI run:
+```sh
+curl -O -L "https://github.com/datastax/stargate/releases/download/v0.1.1/stargate_0.1.1_$(uname -s)_x86_64.tar.gz"
+tar -xzf ./stargate_*.tar.gz
+```
+If this fails on your system, you can try downloading the appropriate CLI binary from: https://github.com/datastax/stargate/releases
 
 # 1. Start the service
 
-Before we can create and query our new stargate database, we'll start local docker containers for cassandra and the stargate service.
-To do that, download the CLI binary above and run: 
+Before we can create and query our new stargate database, we'll start local docker containers for cassandra and the stargate service:
 ```sh
 ./stargate service start --with-cassandra
 ```
-
-A project holds your logical data model, its entities, queries and API endpoints. Simply put, it’s your database.
-
 
 # 2. Design your database
 
 The configuration file for your database is a logical data model that specifies your entities, indices, and queries.
 First, we will look at the entities section of the configuration.
-The example below will define an entity named `Todo` and give it two fields: `title`, and `isComplete`.
+The example below defines an entity named `Todo` and gives it two fields: `title`, and `isComplete`.
 
 1. Copy the following configuration to a file `./todo.conf`
     ```hocon
