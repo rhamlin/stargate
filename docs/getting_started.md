@@ -25,7 +25,7 @@ Minimal testing has been done on Windows, so it is currently unsupported.
     }' > stargate.conf
     ```
 
-2. Download the stargate CLI[^1], start up local cassandra and stargate instances, then creating a database named `myNamespace` from the configuration in step 1.
+2. Download the stargate CLI<sup id="a1">[*](#f1)</sup>, start up local cassandra and stargate instances, then create a database named `myNamespace` from the configuration in step 1.
 ```sh
 curl -O -L "https://github.com/datastax/stargate/releases/download/v0.1.1/stargate_0.1.1_$(uname -s)_x86_64.tar.gz"
 tar -xzf ./stargate_*.tar.gz
@@ -69,5 +69,10 @@ curl -X PUT "http://localhost:8080/v1/api/myNamespace/query/entity/Todo" \
 '
 ```
 
+<br />
+<span style="color:grey">
 
-[^1]: If this fails on your system, you can try downloading the appropriate CLI binary from: https://github.com/datastax/stargate/releases
+###### footnotes
+<sup id="f1">*</sup> If this fails on your system, you can try downloading the appropriate CLI binary from: https://github.com/datastax/stargate/releases [↩](#a1)
+
+</span>
