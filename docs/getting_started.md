@@ -27,14 +27,15 @@ tar -xzf ./stargate*.tar.gz
 ./stargate service start --with-cassandra 
 ./stargate apply myNamespace stargate.conf
 ```
-to start up local cassandra and stargate instances, creating a schema `myNamespace` from the configuration in step 1.
+to start up local cassandra and stargate instances, creating a database named `myNamespace` from the configuration in step 1.
    
     
 3. Query the database
 
 Create a Todo:
 ```sh
-curl -X POST http://localhost:8080/v1/api/myNamespace/query/entity/Todo -H "content-type: application/json" -d'
+curl -X POST "http://localhost:8080/v1/api/myNamespace/query/entity/Todo" \
+     -H "content-type: application/json" -d'
 { 
  "todo": "Get stargate running",
  "isComplete": false
@@ -45,7 +46,8 @@ cat ./createResponse.out
 
 Get todos:
 ```sh
-curl -X GET http://localhost:8080/v1/api/myNamespace/query/entity/Todo -H "content-type: application/json" -d'
+curl -X GET "http://localhost:8080/v1/api/myNamespace/query/entity/Todo" \
+     -H "content-type: application/json" -d'
 { 
  "-match": "all"
 }
@@ -55,9 +57,10 @@ curl -X GET http://localhost:8080/v1/api/myNamespace/query/entity/Todo -H "conte
 Update todo:
 ```sh
 todoId=$(cat ./createResponse.out | jq -r .[0].entityId)
-curl -X PUT http://localhost:8080/v1/api/myNamespace/query/entity/Todo -H "content-type: application/json" -d'
+curl -X PUT "http://localhost:8080/v1/api/myNamespace/query/entity/Todo" \
+     -H "content-type: application/json" -d'
 { 
- "-match": ["entityId", "=", "'"${todoId}"""'"],
+ "-match": ["entityId", "=", "'"${todoId}"'"],
  "isComplete": true
 }
 '

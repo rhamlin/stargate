@@ -24,7 +24,8 @@ in your datamodel configuration to give you a convenient API. Queries can accept
 
 The following query returns a paginated list of the first 100 Todos with "title" and "isComplete" fields that are related to user John Doe.
 ```sh
-curl -X GET http://localhost:8080/v1/api/test/query/entity/Todo -H "content-type: application/json" -d'
+curl -X GET "http://localhost:8080/v1/api/test/query/entity/Todo" \
+     -H "content-type: application/json" -d'
 {
  "-match": ["user.username", "=", "John Doe"], 
  "-limit": 100,
@@ -45,7 +46,8 @@ The following flags are supported:
  - ttl
 
 ```sh
-curl -X POST http://localhost:8080/v1/api/test/query/stored/todoByUsername -H "content-type: application/json" -d'
+curl -X POST "http://localhost:8080/v1/api/test/query/stored/todoByUsername" \
+     -H "content-type: application/json" -d'
 {
  "-match": {"username": "John Doe"}, 
  "-limit": 100,
@@ -68,7 +70,7 @@ There is a special URL path called `continue` which will accept this paging toke
 
 For example
 ```sh
-curl -X GET http://localhost:8080/v1/api/test/query/continue/8ffac247-77a5-4f38-94c0-ad2b0e95c9ae
+curl -X GET "http://localhost:8080/v1/api/test/query/continue/8ffac247-77a5-4f38-94c0-ad2b0e95c9ae"
 ```
 
 Result:
@@ -82,7 +84,8 @@ Stargate allows a flexible API to manipulate data in Cassandra.
 ### Create
 Create operations are any `POST` request on an entity's path. Create operations have a root entity that will be created as well as relationships that can be linked, unlinked, or replaced.
 ```sh
-curl -X POST http://localhost:8080/v1/api/test/query/entity/Todo -H "content-type: application/json" -d'
+curl -X POST "http://localhost:8080/v1/api/test/query/entity/Todo" \
+     -H "content-type: application/json" -d'
 { 
  "title": "Create a Relation",
  "isComplete": false
@@ -92,7 +95,8 @@ curl -X POST http://localhost:8080/v1/api/test/query/entity/Todo -H "content-typ
 ### Update 
 Update operations are any `PUT` request on an entity's path. Update operations require a `match` clause. Both scalars and relationships can be updated with an update statement.
 ```sh
-curl -X PUT http://localhost:8080/v1/api/test/query/entity/Todo -H "content-type: application/json" -d'
+curl -X PUT "http://localhost:8080/v1/api/test/query/entity/Todo" \
+     -H "content-type: application/json" -d'
 { 
  "-match": ["user.username", "=", "John Doe"],
  "isComplete": true
@@ -105,7 +109,8 @@ to any other entities.
 
 Removing Todo and all of its relationships:
 ```sh
-curl -X DELETE http://localhost:8080/v1/api/test/query/entity/Todo -H "content-type: application/json" -d'
+curl -X DELETE "http://localhost:8080/v1/api/test/query/entity/Todo" \
+     -H "content-type: application/json" -d'
 { 
   "-match": ["user.username", "=", "John Doe"]
 }
@@ -115,7 +120,8 @@ curl -X DELETE http://localhost:8080/v1/api/test/query/entity/Todo -H "content-t
 Additionally, if you wish to recursively delete Users that are related to the matching Todos, you can include that relation in the payload.
 Similar to a GET query, you can traverse as deep as you wish in the relation tree, which will keep deleting more transitively related entities.
 ```sh
-curl -X DELETE http://localhost:8080/v1/api/test/query/entity/Todo -H "content-type: application/json" -d'
+curl -X DELETE "http://localhost:8080/v1/api/test/query/entity/Todo" \
+     -H "content-type: application/json" -d'
 { 
   "-match": ["user.username", "=", "John Doe"],
   "user": {}
@@ -131,7 +137,8 @@ Relationships can be added, removed, or replaced on any entity.
 
 Adding a new todo and connecting it to an existing user:
 ```sh
-curl -X POST http://localhost:8080/v1/api/test/query/entity/Todo -H "content-type: application/json" -d'
+curl -X POST "http://localhost:8080/v1/api/test/query/entity/Todo" \
+     -H "content-type: application/json" -d'
 { 
  "title": "Create a Relation",
  "isComplete": false,
@@ -143,7 +150,8 @@ curl -X POST http://localhost:8080/v1/api/test/query/entity/Todo -H "content-typ
 ```
 Update todos to give them to a User:
 ```sh
-curl -X PUT http://localhost:8080/v1/api/test/query/entity/Todo -H "content-type: application/json" -d'
+curl -X PUT "http://localhost:8080/v1/api/test/query/entity/Todo" \
+     -H "content-type: application/json" -d'
 { 
  "-match": ["isComplete", "=", false],
  "isComplete": true,

@@ -46,7 +46,8 @@ The example below will define an entity named `Todo` and give it two fields: `ti
 
     Out of the box, stargate gives you create, get, update, and delete functionality on each entity. Below is an example of a create statement.
     ```sh
-    curl -X POST http://localhost:8080/v1/api/test/query/entity/Todo -H "content-type: application/json" -d'
+    curl -X POST "http://localhost:8080/v1/api/test/query/entity/Todo" \
+         -H "content-type: application/json" -d'
     { 
       "title": "Create a Stargate Database",
       "isComplete": false
@@ -55,7 +56,8 @@ The example below will define an entity named `Todo` and give it two fields: `ti
     ```
     Now let’s check that the database has our change
     ```sh
-    curl -X GET http://localhost:8080/v1/api/test/query/entity/Todo -H "content-type: application/json" -d'
+    curl -X GET "http://localhost:8080/v1/api/test/query/entity/Todo" \
+         -H "content-type: application/json" -d'
     { 
       "-match": "all"
     }
@@ -111,7 +113,8 @@ Now we’re ready to create and then query our first Todos by User.
 
 1. First we need to create a new user:
     ```sh
-    curl -X POST http://localhost:8080/v1/api/test/query/entity/User -H "content-type: application/json" -d'
+    curl -X POST "http://localhost:8080/v1/api/test/query/entity/User" \
+         -H "content-type: application/json" -d'
     { 
      "username": "John Doe"
     }
@@ -121,7 +124,8 @@ Now we’re ready to create and then query our first Todos by User.
 2. Next, we will create a new Todo and link it to our existing User.  The "-match" flag is specified as a list of (field, comparison, argument) triples,
     and any Users that match will be linked to the new parent Todo.
     ```sh
-    curl -X POST http://localhost:8080/v1/api/test/query/entity/Todo -H "content-type: application/json" -d'
+    curl -X POST "http://localhost:8080/v1/api/test/query/entity/Todo" \
+         -H "content-type: application/json" -d'
     { 
      "title": "Create a Relation",
      "isComplete": false,
@@ -137,7 +141,8 @@ Now we’re ready to create and then query our first Todos by User.
     Because "user" is also included in the payload, we will also return any related Users nested under their parent Todos.
     And if those users had even more relations you wanted to traverse, you would list those in the currently empty json object following "user".
     ```sh
-    curl -X GET http://localhost:8080/v1/api/test/query/entity/Todo -H "content-type: application/json" -d'
+    curl -X GET "http://localhost:8080/v1/api/test/query/entity/Todo" \
+         -H "content-type: application/json" -d'
     {
       "-match":["user.username", "=", "John Doe"], 
       "user": {}
@@ -161,7 +166,8 @@ Now we’re ready to create and then query our first Todos by User.
 4. Update the todo to complete.
     Now we can update the todo with a new status. We do that with a PUT request
     ```sh
-    curl -X PUT http://localhost:8080/v1/api/test/query/entity/Todo -H "content-type: application/json" -d'
+    curl -X PUT "http://localhost:8080/v1/api/test/query/entity/Todo" \
+         -H "content-type: application/json" -d'
     {
       "-match":["user.username", "=", "John Doe"], 
       "isComplete": true
