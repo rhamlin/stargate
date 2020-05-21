@@ -7,7 +7,7 @@ This tutorial will walk you through specifying a data model and defining access 
 ##### What you need
 
 You will need both docker and the stargate CLI to run stargate locally.
-You can download the stargate CLI from [https://github.com/datastax/stargate/releases] and then unzip it to your current working directory.
+You can download the stargate CLI from https://github.com/datastax/stargate/releases and then unzip it to your current working directory.
 
 # 1. Start the service
 

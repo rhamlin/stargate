@@ -1,4 +1,4 @@
-Getting started in three easy steps.
+# Getting started in three easy steps.
 
 Getting a microservice and cassandra off the ground can be a big task. Stargate makes this as easy as three steps.
 
@@ -21,7 +21,7 @@ Prerequisites: You must have **docker** to use stargate locally.
     }' > stargate.conf
     ```
 
-2. Download the stargate CLI from [https://github.com/datastax/stargate/releases] to your current working directory and run
+2. Download the stargate CLI from https://github.com/datastax/stargate/releases to your current working directory and run
 ```sh
 tar -xzf ./stargate*.tar.gz
 ./stargate service start --with-cassandra 
