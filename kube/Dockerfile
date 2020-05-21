@@ -11,6 +11,7 @@
 FROM openjdk:11-jdk-slim
 ARG SG_VERSION
 COPY ./target ./stargate
+COPY ./src/main/webapp ./stargate/src/main/webapp
 WORKDIR ./stargate
 ENV SGV ${SG_VERSION}
 RUN cp ./classes/logback-prod.xml ./classes/logback.xml

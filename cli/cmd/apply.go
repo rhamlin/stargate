@@ -38,6 +38,9 @@ func Apply(cmd *cobra.Command, name, path, url string) error {
 
 // ApplyWithLog sends a schema to server and print output for a user
 func ApplyWithLog(cmd *cobra.Command, name, path, url string) error {
+	if url == "" {
+		url = upload.Host
+	}
 	err := Apply(cmd, name, path, url)
 
 	if err != nil {
@@ -46,6 +49,7 @@ func ApplyWithLog(cmd *cobra.Command, name, path, url string) error {
 	} else {
 		endpointURL := purell.MustNormalizeURLString(SchemaUrl(url, name), purell.FlagsUnsafeGreedy)
 		cmd.Println("Endpoint created at", endpointURL)
+		cmd.Printf("\nView your API at: %s/api-docs/%s/swagger/\n\n", url, name)
 	}
 	return err
 }
