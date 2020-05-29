@@ -34,7 +34,7 @@ Welcome to Stargate, the easy query layer for your NoSQL database.
 
 ### Command line utility
 
-Ok now you're sold, go download the binaries [here](releases) for the command line utility. 
+Ok now you're sold, go download the binaries [here](https://github.com/datastax/stargate/releases) for the command line utility. 
 
 ### Production
 

@@ -106,7 +106,7 @@ queries: {
 }
 ```
 ### Query Name
-The query name is the first block under the entity. In the example above, it is the `customerByFirstName`.  
+The query name is the first block under the entity. In the example above, it is the `todoByUsername`.  
 
 ### Match Statement
 The match statement is how the entity should be retrieved. It is conceptually similar to a ‘filter’ in data manipulation languages or ‘where’ in a sql database.
