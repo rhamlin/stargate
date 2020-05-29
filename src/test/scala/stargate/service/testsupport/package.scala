@@ -4,7 +4,7 @@ import com.datastax.oss.driver.api.core.CqlSession
 import com.typesafe.config.ConfigFactory
 import stargate.cassandra.CassandraTable
 import stargate.model._
-import stargate.service.config.ParsedStargateConfig
+import stargate.service.config.StargateConfig
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.util.Random
@@ -28,6 +28,6 @@ package object testsupport {
     entity: String,
     namespace: String,
     rand: Random,
-    sgConfig: ParsedStargateConfig
+    sgConfig: StargateConfig
   )
 }

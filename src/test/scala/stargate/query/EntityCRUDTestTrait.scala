@@ -179,7 +179,7 @@ trait EntityCRUDTestTrait extends CassandraTestSession {
   @Test
   def crudTest: Unit = {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
-    val keyspace = newKeyspace
+    val keyspace = newKeyspace()
     val model = stargate.schema.outputModel(inputModel, keyspace)
     crudTest(model, model.mutation, session, keyspace)
   }
@@ -187,7 +187,7 @@ trait EntityCRUDTestTrait extends CassandraTestSession {
   @Test
   def batchedCrudTest: Unit = {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("schema.conf"))
-    val keyspace = newKeyspace
+    val keyspace = newKeyspace()
     val model = stargate.schema.outputModel(inputModel, keyspace)
     crudTest(model, model.batchMutation, session, keyspace)
   }

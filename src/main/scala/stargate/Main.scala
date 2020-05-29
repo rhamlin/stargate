@@ -22,29 +22,11 @@ import com.typesafe.scalalogging.Logger
 import io.prometheus.client.exporter.MetricsServlet
 import org.eclipse.jetty.servlet.{DefaultServlet, ServletHolder}
 import org.eclipse.jetty.webapp.WebAppContext
-import stargate.service.config.ParsedStargateConfig
+import stargate.service.config.StargateConfig
 import org.eclipse.jetty.server.Server
 
 object Main {
   private val logger = Logger("stargate.Main")
-  private def mapConfig(config: Config): ParsedStargateConfig = {
-    ParsedStargateConfig(
-      config.getInt("http.port"),
-      config.getInt("defaultTTL"),
-      config.getInt("defaultLimit"),
-      config.getLong("validation.maxSchemaSizeKB"),
-      config.getLong("validation.maxMutationSizeKB"),
-      config.getLong("validation.maxRequestSizeKB"),
-      config.getString("cassandra.contactPoints")
-        .split(",").map(_.split(":")).map(hp => (hp(0), Integer.parseInt(hp(1)))).toList,
-      config.getString("cassandra.dataCenter"),
-      config.getInt("cassandra.replication"),
-      config.getString("stargateKeyspace"),
-      config.getString("cassandra.username"),
-      config.getString("cassandra.password"),
-      config.getString("cassandra.authProvider"),
-    )
-  }
 
   def main(args: Array[String]) = {
     val parser = new scopt.OptionParser[Params]("stargate-server") {
@@ -65,8 +47,7 @@ object Main {
     val config = (if (appConf.isBlank)
       ConfigFactory.parseResources("stargate-docker.conf").resolve()
     else ConfigFactory.parseFile(new File(appConf)).resolve())
-    val parsedConfig = mapConfig(config)
-    ParsedStargateConfig.globalConfig = parsedConfig
+    val parsedConfig = StargateConfig.parse(config)
     stargate.service.serverStart(parsedConfig)
   }
 }

@@ -31,7 +31,7 @@ trait ReadWriteTestTrait extends CassandraTestSession {
 
   @Test
   def testCreateDelete = {
-    val keyspace = newKeyspace
+    val keyspace = newKeyspace()
     val model = stargate.schema.outputModel(inputModel, keyspace)
     util.await(model.createTables(session, executor)).get
 

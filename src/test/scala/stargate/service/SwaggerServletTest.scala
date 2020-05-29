@@ -15,11 +15,10 @@
  */
 package stargate.service
 
-import stargate.service.testsupport.ServletContext
-import sttp.client._
-import org.junit.Test
-import org.junit.Assert._
 import org.hamcrest.CoreMatchers._
+import org.junit.Assert._
+import org.junit.Test
+import sttp.client._
 
 trait SwaggerServletTest extends HttpClientTestTrait {
   

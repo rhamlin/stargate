@@ -25,7 +25,7 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import stargate.cassandra.CassandraTable
 import stargate.model.{OutputModel, generator, queries}
 import stargate.query.pagination.{StreamEntry, Streams}
-import stargate.service.config.ParsedStargateConfig
+import stargate.service.config.StargateConfig
 import stargate.service.metrics.RequestCollector
 import stargate.{cassandra, query, util}
 import scala.concurrent.duration.Duration
@@ -33,11 +33,11 @@ import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 import scala.util.Try
 
 class StargateServlet(
-  val sgConfig: ParsedStargateConfig,
-  val cqlSession: CqlSession,
-  val apps: Namespaces,
-  val datamodelRepoTable: CassandraTable,
-  val executor: ExecutionContextExecutor
+                       val sgConfig: StargateConfig,
+                       val cqlSession: CqlSession,
+                       val apps: Namespaces,
+                       val datamodelRepoTable: CassandraTable,
+                       val executor: ExecutionContextExecutor
 ) extends HttpServlet
     with RequestCollector
     with LazyLogging {
@@ -144,7 +144,7 @@ class StargateServlet(
     if (!previousDatamodel.contains(input)) {
       logger.info(s"""creating keyspace "$appName" for new datamodel""")
       datamodelRepository.updateDatamodel(appName, input, datamodelRepoTable, cqlSession, executor)
-      cassandra.recreateKeyspace(cqlSession, appName, sgConfig.cassandraReplication)
+      cassandra.recreateKeyspace(cqlSession, appName, sgConfig.cassandra.cassandraReplication)
       Await.result(model.createTables(cqlSession, executor), Duration.Inf)
     } else {
       logger.info(s"""reusing existing keyspace "$appName" with latest datamodel""")

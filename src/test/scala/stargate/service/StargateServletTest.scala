@@ -19,18 +19,18 @@ import java.net.http.HttpRequest.BodyPublishers
 import java.net.http.HttpResponse.BodyHandlers
 import java.net.http.{HttpClient, HttpRequest}
 
-import org.hamcrest.CoreMatchers._
 import org.junit.Assert._
 import org.junit.Test
+import stargate.KeyspaceRegistry
 import sttp.client._
 
 import scala.io.Source
 
-trait StargateServletTest extends HttpClientTestTrait {
+trait StargateServletTest extends HttpClientTestTrait with KeyspaceRegistry {
 
   @Test
   def testNamespaceCreate(): Unit = {
-    val newNamespace = s"testCreate${sc.rand.nextInt(2000)}"
+    val newNamespace = this.registerKeyspace(s"testCreate${sc.rand.nextInt(2000)}")
     val r = quickRequest
       .post(wrap(s"${StargateApiVersion}/api/${newNamespace}/schema"))
       .contentType("application/hocon")
@@ -55,7 +55,7 @@ trait StargateServletTest extends HttpClientTestTrait {
 
   @Test
   def testDeleteNamespace(): Unit = {
-    val newNamespace = s"testCreate${sc.rand.nextInt(2000)}"
+    val newNamespace = this.registerKeyspace(s"testCreate${sc.rand.nextInt(2000)}")
     var r = quickRequest
       .post(wrap(s"${StargateApiVersion}/api/${newNamespace}/schema"))
       .contentType("application/hocon")

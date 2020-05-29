@@ -10,7 +10,7 @@ import org.eclipse.jetty.servlet.DefaultServlet
 import io.prometheus.client.jetty.JettyStatisticsCollector
 import org.eclipse.jetty.server.handler.StatisticsHandler
 import io.prometheus.client.hotspot.DefaultExports
-import stargate.service.config.ParsedStargateConfig
+import stargate.service.config.StargateConfig
 import org.eclipse.jetty.servlet.ServletHolder
 import scala.reflect.api.Names
 
@@ -54,9 +54,9 @@ package object service {
   /**
     * strictly in here for testing
     */
-  def serverStart(sgConfig: ParsedStargateConfig): Unit = {
+  def serverStart(sgConfig: StargateConfig): Unit = {
     //initial configuration
-    val cqlSession: CqlSession = cassandra.session(sgConfig)
+    val cqlSession: CqlSession = cassandra.session(sgConfig.cassandra)
     val executor = ExecutionContext.global
     val datamodelRepoTable: cassandra.CassandraTable = datamodelRepository.createDatamodelRepoTable(sgConfig, cqlSession, executor)
     val namespaces = new Namespaces(datamodelRepoTable, cqlSession)

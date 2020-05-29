@@ -15,140 +15,86 @@
  */
 
 package stargate
+import java.nio.file.Paths
 import java.util.concurrent.{ConcurrentSkipListSet, TimeUnit}
 
 import com.datastax.oss.driver.api.core.CqlSession
-import com.typesafe.scalalogging.Logger
-import stargate.service.config.ParsedStargateConfig
+import com.typesafe.scalalogging.LazyLogging
+import stargate.service.config.CassandraClientConfig
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.util.{Random, Try}
-import scala.util.Failure
-import scala.util.Success
 
 trait CassandraTestSession {
   def session: CqlSession
-  def newKeyspace: String
+  def newKeyspace(): String
+}
+trait KeyspaceRegistry {
+  def registerKeyspace(keyspace: String): String
 }
 
-trait CassandraTest {
-  val logger = Logger(classOf[CassandraTest])
+trait CassandraTest extends LazyLogging {
+
+  val image = "cassandra:3.11.6"
   private val persistentDseContainer = "stargate-tests-cassandra"
-  private var contacts: List[(String, Int)] = _
+  private val dataCenter: String = "datacenter1"
 
-  // hard-coding this for now
-  val dataCenter: String = "datacenter1"
+  private var cqlPort: Int = _
+  private var dockerStarted: Boolean = true
+  var cqlSession: CqlSession = _
+  private val keyspaces: ConcurrentSkipListSet[String] = new java.util.concurrent.ConcurrentSkipListSet[String]()
 
-  var cqlSession: CqlSession = null
-  val keyspaces: ConcurrentSkipListSet[String] = new java.util.concurrent.ConcurrentSkipListSet[String]()
-  var alreadyRunning: Boolean = false
-  var parsedStargateConfig: ParsedStargateConfig = _
 
-  /**
-    * start cassandra
-    */
-  def startCassandra(): Unit = {
-    logger.info("checking for existing cassandra test instance")
-    lazy val localDocker: Try[Int] = {
-      val dockerOutput = Try(util.process.exec(List("docker", "port", persistentDseContainer, "9042")))
-      dockerOutput match {
-        case Failure(e) =>
-          logger.error(e.getMessage())
-          localDocker
-        case Success(value) =>
-          logger.info("checking for cql port number on cassandra test instance")
-          Try(Integer.parseInt(value.get.split(":")(1).trim))
-      }
-    }
-    var statusText: Try[String] = {
-      if (localDocker.isFailure) {
-        Failure[String](new RuntimeException("unknown container skipping"))
-      } else {
-        logger.info("checking for existing cassandra test instance run status")
-        util.process.exec(List("docker", "inspect", "-f", "'{{.State.Running}}'", persistentDseContainer))
-      }
-    }
-    if (statusText.isSuccess) {
-      logger.warn(s"container status output is running == ${statusText.get}")
-    }
-    if (localDocker.isSuccess && statusText.isSuccess && statusText.get.contains("true")) {
-      logger.info("using already running docker-cassandra instance for test: {}", localDocker.get)
-      contacts = List(("localhost", localDocker.get))
-      alreadyRunning = true
-    } else {
-      val image = "cassandra:3.11.6"
-      val yamlFile = getClass().getResource("/cassandra.yaml").getFile().replace("/C:", "") //hack on windows
-      logger.warn("creating cassandra test instance")
-      if (statusText.isFailure) {
-        util.process.exec(List("docker", "create", "--name", persistentDseContainer, "-P", image)).get
-        util.process.exec(List("docker", "cp", yamlFile, s"$persistentDseContainer:/etc/cassandra/")).get
-      }
-      util.process.exec(List("docker", "start", persistentDseContainer)).get
-      logger.warn(s"""starting cassandra docker container for test: ${persistentDseContainer})
-                     |    this can take nearly a minute to start, so it's generally faster to: 1) run cassandra in the background on port 9042, or
-                     |    2) run docker with name ${persistentDseContainer} with the following command:
-                     |    docker run -d -P --name ${persistentDseContainer} ${image}""".stripMargin)
-      val port = Integer.parseInt(
-        util.process.exec(List("docker", "port", persistentDseContainer, "9042")).get.split(":")(1).trim
-      )
-      logger.warn(s"port to connect to is $port")
-      contacts = List(("localhost", port))
-    }
+  def ensureCassandraRunning(): Unit = {
+    def getPort(): Try[Int] = util.process.exec(List("docker", "port", persistentDseContainer, "9042")).map(out => Integer.parseInt(out.trim.split(":")(1)))
+    val existing: Try[Any] = getPort().map(port => { dockerStarted = false; logger.info("using existing cassandra docker at port: {}", port)})
+    val restarted: Try[Any] = existing.orElse(util.process.exec(List("docker", "restart", persistentDseContainer)).map(_ => logger.info("restarting old container: {}", persistentDseContainer)))
+    val created: Try[Any] = restarted.orElse({
+      val testConfig = Paths.get("src", "test", "resources", "cassandra.yaml").toAbsolutePath
+      val command = List("docker", "run", "-d", "-P", "-v", s"${testConfig.toString}:/etc/cassandra/cassandra.yaml", "--name", persistentDseContainer, image)
+      logger.warn(s"""starting cassandra docker container for test: ${persistentDseContainer}
+                     |    you can start the container yourself if you dont want to wait for the container to start:
+                     |    ${command.mkString(" ")}""".stripMargin)
+      util.process.exec(command)
+    })
+    this.cqlPort = getPort().get
   }
 
+  def clientConfig: CassandraClientConfig = {
+    CassandraClientConfig(List(("localhost", cqlPort)), dataCenter, 1, "PlainTextAuthProvider", "cassandra", "cassandra")
+  }
+
+  def newKeyspace(): String = {
+    val keyspace = ("keyspace" + Random.alphanumeric.take(10).mkString).toLowerCase
+    logger.info("creating keyspace: {}", keyspace)
+    cassandra.createKeyspace(cqlSession, keyspace, 1)
+    registerKeyspace(keyspace)
+  }
+  def registerKeyspace(keyspace: String): String = {
+    this.keyspaces.add(keyspace)
+    keyspace
+  }
+  private def cleanupKeyspace(keyspace: String) = {
+    val wiped = Try(cassandra.wipeKeyspace(cqlSession, keyspace))
+    logger.info(s"cleaning up keyspace ${keyspace}: ${wiped.toString}")
+    ()
+  }
+
+
   // make this @BeforeClass for any tests that depend on cassandra
-  def ensureCassandraRunning(): Unit = {
-    startCassandra()
-    val username = "cassandra"
-    val password = "cassandra"
-    val authProvider = "PlainTextAuthProvider"
-    parsedStargateConfig = ParsedStargateConfig(
-      9090,
-      100,
-      100,
-      32000L,
-      32000L,
-      32000L,
-      contacts,
-      dataCenter,
-      1,
-      "cassandra-test",
-      authProvider,
-      username,
-      password
-    )
-    if (!alreadyRunning) {
-      util
-        .retry(
-          cassandra.session(parsedStargateConfig),
-          Duration.apply(60, TimeUnit.SECONDS),
-          Duration.apply(5, TimeUnit.SECONDS)
-        )
-        .get
-      alreadyRunning = true
-    }
-    if (cqlSession == null) {
-      cqlSession = cassandra.session(parsedStargateConfig)
-    }
+  def init(): Unit = {
+    ensureCassandraRunning()
+    logger.info("creating CqlSession with config: {}", this.clientConfig)
+    cqlSession = util.retry(cassandra.session(this.clientConfig), Duration("60s"), Duration("5s")).get
   }
 
   // make this @AfterClass for any tests that depend on cassandra
   def cleanup(): Unit = {
     keyspaces.asScala.foreach(cleanupKeyspace)
-  }
-
-  def newKeyspace: String = {
-    val keyspace = ("keyspace" + Random.alphanumeric.take(10).mkString).toLowerCase
-    logger.info("creating keyspace: {}", keyspace)
-    cassandra.createKeyspace(cqlSession, keyspace, 1)
-    keyspaces.add(keyspace)
-    keyspace
-  }
-
-  def cleanupKeyspace(keyspace: String) = {
-    val wiped = Try(cassandra.wipeKeyspace(cqlSession, keyspace))
-    logger.info(s"cleaning up keyspace ${keyspace}: ${wiped.toString}")
-    ()
+    cqlSession.close()
+    if(dockerStarted) {
+      util.process.exec(List("docker", "kill", persistentDseContainer)).get
+    }
   }
 }

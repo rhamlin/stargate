@@ -61,7 +61,7 @@ trait PaginationTestTrait extends CassandraTestSession {
   @Test
   def paginationTest: Unit = {
     val inputModel = parser.parseModel(ConfigFactory.parseResources("pagination-schema.conf"))
-    val keyspace = newKeyspace
+    val keyspace = newKeyspace()
     val model = stargate.schema.outputModel(inputModel, keyspace)
     val executor = ExecutionContext.global
     util.await(model.createTables(session, executor)).get

@@ -29,12 +29,12 @@ class MergedCassandraTest
   with NullKeysTestTrait {
 
   override def session: CqlSession = MergedCassandraTest.cqlSession
-  override def newKeyspace: String = MergedCassandraTest.newKeyspace
+  override def newKeyspace(): String = MergedCassandraTest.newKeyspace()
 }
 
 object MergedCassandraTest extends CassandraTest {
 
-  @BeforeClass def before() = this.ensureCassandraRunning
+  @BeforeClass def before() = this.init
   @AfterClass def after = this.cleanup
 
 }

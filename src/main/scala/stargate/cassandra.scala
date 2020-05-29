@@ -26,7 +26,7 @@ import com.datastax.oss.driver.api.querybuilder.SchemaBuilder
 import com.datastax.oss.driver.api.querybuilder.schema.CreateTable
 import com.datastax.oss.driver.internal.core.util.Strings
 import com.typesafe.scalalogging.LazyLogging
-import stargate.service.config.ParsedStargateConfig
+import stargate.service.config.{CassandraClientConfig, StargateConfig}
 import stargate.util.AsyncList
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -219,18 +219,18 @@ object cassandra extends LazyLogging {
     * main entry point to create a session for Apache Cassandra. There should only
     * be one of those per Apache Cassandra cluster
     *
-    * @param sgConfig parsed configuration to use. Sources from two hocon files merged together defaults.conf and stargate-docker.conf in the src/main/resources folder
+    * @param config properties needed to create cql client connection
     * @return an active CqlSession it must be shut down when stopping the application
     */
-  def session(sgConfig: ParsedStargateConfig): CqlSession = {
-      val contacts: List[(String, Int)] = sgConfig.cassandraContactPoints
-      val dataCenter: String = sgConfig.cassandraDataCenter
-      sgConfig.cassandraAuthProvider match {
+  def session(config: CassandraClientConfig): CqlSession = {
+      val contacts: List[(String, Int)] = config.cassandraContactPoints
+      val dataCenter: String = config.cassandraDataCenter
+      config.cassandraAuthProvider match {
           //TODO add support for authorization-id when we have newer driver version
           case "PlainTextAuthProvider" => {
             logger.info(s"logging into dc $dataCenter with plain text authentication $contacts")
             sessionBuilder(contacts, dataCenter)
-             .withAuthCredentials(sgConfig.cassandraUserName, sgConfig.cassandraPassword)
+             .withAuthCredentials(config.cassandraUserName, config.cassandraPassword)
              .build
           }
           case "" => {
@@ -238,9 +238,9 @@ object cassandra extends LazyLogging {
             sessionBuilder(contacts, dataCenter).build
           }
           case _ => {
-             val authProvider = Class.forName(sgConfig.cassandraAuthProvider)
+             val authProvider = Class.forName(config.cassandraAuthProvider)
              .asInstanceOf[com.datastax.oss.driver.api.core.auth.AuthProvider]
-             logger.info(s"logging into dc $dataCenter with custom auth provider ${sgConfig.cassandraAuthProvider}")
+             logger.info(s"logging into dc $dataCenter with custom auth provider ${config.cassandraAuthProvider}")
              sessionBuilder(contacts, dataCenter)
                 .withAuthProvider(authProvider).build
           }

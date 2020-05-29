@@ -22,7 +22,7 @@ import io.swagger.v3.oas.models.OpenAPI
 import org.json4s.{DefaultFormats, Formats}
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import stargate.util
-import stargate.service.config.ParsedStargateConfig
+import stargate.service.config.StargateConfig
 import com.swrve.ratelimitedlogger.RateLimitedLog
 import java.nio.charset.StandardCharsets
 import java.net.URLDecoder
@@ -31,7 +31,7 @@ import java.net.URLDecoder
   * SwaggerServlet serves the swagger api json and html
   * @param namespaces provides access to configured namespaces as well as the ability to modify namespaces
   */
-class SwaggerServlet(val namespaces: Namespaces, sgConfig: ParsedStargateConfig) extends HttpServlet with LazyLogging {
+class SwaggerServlet(val namespaces: Namespaces, sgConfig: StargateConfig) extends HttpServlet with LazyLogging {
   //TODO replace this with some wrapper
   protected implicit val jsonFormats: Formats = DefaultFormats.withBigDecimal
   val maxRequestSize: Long = sgConfig.maxRequestSizeKB * 1024

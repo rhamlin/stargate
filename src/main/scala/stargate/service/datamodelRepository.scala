@@ -27,7 +27,7 @@ import stargate.model.{ScalarComparison, ScalarCondition}
 import stargate.query.{read, write}
 import stargate.{cassandra, model}
 import stargate.util
-import stargate.service.config.ParsedStargateConfig
+import stargate.service.config.StargateConfig
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -47,8 +47,8 @@ object datamodelRepository {
     * @param cqlSession
     * @return
     */
-  def createDatamodelRepoTable(sgConfig: ParsedStargateConfig, cqlSession: CqlSession, executor: ExecutionContextExecutor): CassandraTable = {
-    util.await(datamodelRepository.ensureRepoTableExists(sgConfig.stargateKeyspace, sgConfig.cassandraReplication, cqlSession, executor)).get
+  def createDatamodelRepoTable(sgConfig: StargateConfig, cqlSession: CqlSession, executor: ExecutionContextExecutor): CassandraTable = {
+    util.await(datamodelRepository.ensureRepoTableExists(sgConfig.stargateKeyspace, sgConfig.cassandra.cassandraReplication, cqlSession, executor)).get
   }
 
   def repoTable(keyspace: String): CassandraTable = {

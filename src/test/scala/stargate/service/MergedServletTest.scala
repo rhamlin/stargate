@@ -1,19 +1,14 @@
 package stargate.service
 
-import org.junit.AfterClass
-import org.junit.BeforeClass
-import scala.util.Random
-import scala.concurrent.ExecutionContextExecutor
-import scala.concurrent.ExecutionContext
-import stargate.cassandra
-import stargate.service.testsupport.ServletContext
+import org.junit.{AfterClass, BeforeClass}
 import stargate.CassandraTest
-import org.junit.Before
-import org.junit.After
+import stargate.service.config.StargateConfig
+import stargate.service.testsupport.ServletContext
 import sttp.client._
 import sttp.model.StatusCode
-import com.typesafe.scalalogging.LazyLogging
+
 import scala.io.Source
+import scala.util.Random
 
 object MergedServletTest extends CassandraTest {
   var sc: ServletContext = _
@@ -22,11 +17,21 @@ object MergedServletTest extends CassandraTest {
   @BeforeClass
   def startup() = {
     val rand = new Random()
-    val namespace = s"sgTest${rand.nextInt(10000)}"
+    val namespace = this.registerKeyspace(s"sgTest${rand.nextInt(10000)}")
     val entity = "Customer"
     logger.info("ensuring cassandra is started")
-    ensureCassandraRunning()
-    parsedStargateConfig = parsedStargateConfig.copyWithNewKeyspace(newKeyspace = newKeyspace)
+    this.init()
+    val systemKeyspace = this.newKeyspace()
+    val parsedStargateConfig = StargateConfig(
+      9090,
+      100,
+      100,
+      32000L,
+      32000L,
+      32000L,
+      systemKeyspace,
+      this.clientConfig
+    )
 
     //launch java servlet
     new Thread {
@@ -72,4 +77,6 @@ object MergedServletTest extends CassandraTest {
   }
 }
 
-class MergedServletTest extends QueryServletTest with StargateServletTest with SwaggerServletTest {}
+class MergedServletTest extends QueryServletTest with StargateServletTest with SwaggerServletTest {
+  override def registerKeyspace(keyspace: String): String = MergedServletTest.registerKeyspace(keyspace)
+}
