@@ -193,9 +193,6 @@ trait EntityCRUDTestTrait extends CassandraTestSession {
   }
 }
 
-
-
-
 object EntityCRUDTestTrait {
 
   implicit val executor: ExecutionContext = ExecutionContext.global

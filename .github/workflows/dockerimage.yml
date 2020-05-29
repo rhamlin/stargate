@@ -32,7 +32,9 @@ jobs:
       with:
         java-version: 11
     - name: build
-      run: mvn package
+      run: mvn package -DskipTests=true
+    - name: verify 
+      run: mvn verify 
     - name: stop cassandra
       run: docker kill test-cassandra && docker rm test-cassandra
     - name: install plugin 

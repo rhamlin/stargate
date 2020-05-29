@@ -56,9 +56,6 @@ package object http {
       throw InvalidContentTypeException(jsonType, contentType)
     }
   }
-  def validateRestSize(req: HttpServletRequest): Unit = {
-
-  }
 
   /**
    * based on idea from spring boot, to help prevent escaping out of url string and accessing another path

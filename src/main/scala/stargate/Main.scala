@@ -22,45 +22,11 @@ import com.typesafe.scalalogging.Logger
 import io.prometheus.client.exporter.MetricsServlet
 import org.eclipse.jetty.servlet.{DefaultServlet, ServletHolder}
 import org.eclipse.jetty.webapp.WebAppContext
-import org.scalatra.servlet.ScalatraListener
 import stargate.service.config.ParsedStargateConfig
 import org.eclipse.jetty.server.Server
 
 object Main {
-  private val logger = Logger("main")
-
-  def logStartup() = {
-    logger.info("Launch Mission To StarGate")
-    logger.info(" -----------")
-    logger.info("|         * |")
-    logger.info("| *         |")
-    logger.info("|    *      |")
-    logger.info("|         * |")
-    logger.info("|    *      |")
-    logger.info(" -----------")
-    logger.info("            ")
-    logger.info("            ")
-    logger.info("            ")
-    logger.info("     ^^")
-    logger.info("    ^^^^")
-    logger.info("   ^^^^^^")
-    logger.info("  ^^^^^^^^")
-    logger.info(" ^^^^^^^^^^")
-    logger.info("   ^^^^^^")
-    logger.info("     ||| ")
-    logger.info("     ||| ")
-    logger.info("     ||| ")
-    logger.info("     ||| ")
-    logger.info("      | ")
-    logger.info("      | ")
-    logger.info("      | ")
-    logger.info("        ")
-    logger.info("      |  ")
-    logger.info("0000     0000")
-    logger.info("00000   00000")
-    logger.info("============  ")
-    logger.info(s"""StarGate Version: ${stargate.service.StargateVersion}""")
-  }
+  private val logger = Logger("stargate.Main")
   private def mapConfig(config: Config): ParsedStargateConfig = {
     ParsedStargateConfig(
       config.getInt("http.port"),
@@ -101,21 +67,7 @@ object Main {
     else ConfigFactory.parseFile(new File(appConf)).resolve())
     val parsedConfig = mapConfig(config)
     ParsedStargateConfig.globalConfig = parsedConfig
-    
-    val server = new Server(parsedConfig.httpPort)
-    val context = new WebAppContext()
-    context setContextPath "/"
-    context.setResourceBase("src/main/webapp")
-    context.addEventListener(new ScalatraListener)
-    context.setInitParameter(ScalatraListener.LifeCycleKey, "stargate.service.ScalatraBootstrap")
-    //do not add servlets here..make ScalatraServlets and place in stargate.service.ScalaBootstrap
-    context.addServlet(classOf[DefaultServlet], "/")
-
-    server.setHandler(context)
-
-    logStartup()
-    server.start
-    server.join
+    stargate.service.serverStart(parsedConfig)
   }
 }
 

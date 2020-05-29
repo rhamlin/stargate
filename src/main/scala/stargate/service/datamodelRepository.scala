@@ -26,10 +26,13 @@ import stargate.cassandra.{CassandraColumn, CassandraColumns, CassandraKey, Cass
 import stargate.model.{ScalarComparison, ScalarCondition}
 import stargate.query.{read, write}
 import stargate.{cassandra, model}
+import stargate.util
+import stargate.service.config.ParsedStargateConfig
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.Try
+import scala.concurrent.ExecutionContextExecutor
 
 object datamodelRepository {
 
@@ -37,6 +40,16 @@ object datamodelRepository {
   val NAME_COLUMN = "name"
   val TIMESTAMP_COLUMN = "timestamp"
   val DATAMODEL_COLUMN = "datamodel"
+  /**
+    * factory method for CassandraTable
+    *
+    * @param sgConfig provides the keyspace to use and number of replicas
+    * @param cqlSession
+    * @return
+    */
+  def createDatamodelRepoTable(sgConfig: ParsedStargateConfig, cqlSession: CqlSession, executor: ExecutionContextExecutor): CassandraTable = {
+    util.await(datamodelRepository.ensureRepoTableExists(sgConfig.stargateKeyspace, sgConfig.cassandraReplication, cqlSession, executor)).get
+  }
 
   def repoTable(keyspace: String): CassandraTable = {
     CassandraTable(keyspace, TABLE_NAME, CassandraColumns(

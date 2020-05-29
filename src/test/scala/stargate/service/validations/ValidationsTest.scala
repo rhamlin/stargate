@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package stargate.service
+package stargate.service.validations
 
 import java.nio.ByteBuffer
 import java.time.{Instant, LocalDate, LocalTime}
@@ -23,6 +23,7 @@ import java.util.UUID
 import org.junit.Assert._
 import org.junit.Test
 import stargate.service.http.{InvalidACIIScalarException, InvalidConversionException, InvalidScalarException}
+import stargate.service.validations
 
 class ValidationsTest {
 

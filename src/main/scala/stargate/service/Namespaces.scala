@@ -89,7 +89,7 @@ extends LazyLogging{
 
     outputModel.input.entities.foreach(ev=>{
       val path = new PathItem()
-      val deleteSample = util.toJson(generator.randomDeleteRequest(outputModel.input.entities, ev._1))
+      val deleteSample = util.toPrettyJson(generator.randomDeleteRequest(outputModel.input.entities, ev._1))
       path.delete(new Operation()
         .tags(List(ev._1).asJava)
           .responses(new ApiResponses().addApiResponse("200", new ApiResponse().description("success")))
@@ -99,7 +99,7 @@ extends LazyLogging{
             .addMediaType("application/json", new MediaType()
               .schema(new Schema().`type`("string").example(deleteSample))
           ))))
-      val createSample = util.toJson(generator.randomCreateRequest(outputModel.input.entities, ev._1))
+      val createSample = util.toPrettyJson(generator.randomCreateRequest(outputModel.input.entities, ev._1))
       path.post(new Operation()
           .tags(List(ev._1).asJava)
         .responses(new ApiResponses().addApiResponse("200", new ApiResponse().description("success")
@@ -113,7 +113,7 @@ extends LazyLogging{
             .addMediaType("application/json", new MediaType()
               .schema(new Schema().`type`("string").example(createSample))
           ))))
-      val updateSample = util.toJson(generator.randomUpdateRequest(outputModel.input.entities, ev._1))
+      val updateSample = util.toPrettyJson(generator.randomUpdateRequest(outputModel.input.entities, ev._1))
       path.put(new Operation()
         .tags(List(ev._1).asJava)
         .responses(new ApiResponses().addApiResponse("200", new ApiResponse().description("success")
@@ -127,7 +127,7 @@ extends LazyLogging{
             .addMediaType("application/json", new MediaType()
                 .schema(new Schema().`type`("string").example(updateSample))
           ))))
-      val getSample = util.toJson(generator.randomGetRequest(outputModel.input.entities, ev._1, 100))
+      val getSample = util.toPrettyJson(generator.randomGetRequest(outputModel.input.entities, ev._1, 100))
       path.get(new Operation()
         .tags(List(ev._1).asJava)
         .responses(new ApiResponses().addApiResponse("200", new ApiResponse().description("success")
@@ -232,11 +232,12 @@ extends LazyLogging{
     }
   }
   
-  def getSwagger(key: String): OpenAPI = {
+  def getSwagger(key: String): Option[OpenAPI] = {
     try{
       lock.readLock().lock()
-      namespaces(key)
-      swaggerInstances(key)
+      swaggerInstances.get(key)
+    } catch {
+      case e: Exception => Option[OpenAPI](null)
     } finally{
       lock.readLock().unlock()
     }

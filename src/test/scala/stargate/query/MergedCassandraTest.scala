@@ -21,21 +21,20 @@ import org.junit.{AfterClass, BeforeClass}
 import stargate.{CassandraTest, CassandraTestSession}
 
 class MergedCassandraTest
-  extends CassandraTestSession
-  with EntityCRUDTestTrait
-  with PaginationTestTrait
-  with PredefinedQueryTestTrait
-  with ReadWriteTestTrait
+    extends CassandraTestSession
+    with EntityCRUDTestTrait
+    with PaginationTestTrait
+    with PredefinedQueryTestTrait
+    with ReadWriteTestTrait
   with NullKeysTestTrait {
 
-  override def session: CqlSession = MergedCassandraTest.session
+  override def session: CqlSession = MergedCassandraTest.cqlSession
   override def newKeyspace: String = MergedCassandraTest.newKeyspace
 }
 
-
 object MergedCassandraTest extends CassandraTest {
 
-  @BeforeClass def before = this.ensureCassandraRunning
+  @BeforeClass def before() = this.ensureCassandraRunning
   @AfterClass def after = this.cleanup
 
 }
