@@ -22,11 +22,24 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
 
-class AsyncList[T] private (private val value: Future[Option[(T, () => AsyncList[T])]]) {
+class AsyncList[T] private (private val getValue: () => Future[Option[(T, AsyncList[T])]]) {
 
   import AsyncList._
 
-  var tailCache: Option[AsyncList[T]] = None
+  var valueCache: Option[Future[Option[(T, AsyncList[T])]]] = None
+
+  def value: Future[Option[(T, AsyncList[T])]] = {
+    if(valueCache.isDefined) {
+      valueCache.get
+    } else {
+      this.synchronized {
+        if(valueCache.isEmpty) {
+          valueCache = Some(this.getValue())
+        }
+        valueCache.get
+      }
+    }
+  }
 
   def isEmpty(executor: ExecutionContext): Future[Boolean] = {
     value.map(_.isEmpty)(executor)
@@ -41,55 +54,41 @@ class AsyncList[T] private (private val value: Future[Option[(T, () => AsyncList
   }
 
   def tail(executor: ExecutionContext): AsyncList[T] = {
-    this.synchronized {
-      if(tailCache.isEmpty) {
-        tailCache = Some(unfuture(value.map(_.get._2())(executor), executor))
-      }
-    }
-    tailCache.get
+    unfuture(value.map(_.get._2)(executor), executor)
   }
 
   def map[T2](f: T=>T2, executor: ExecutionContext): AsyncList[T2] = {
-    unfuture(isEmpty(executor).map(isEmpty => {
-      if(isEmpty) {
-        empty[T2]
-      } else {
-        val newHead = head(executor).map(f)(executor)
-        val getTail = () => this.tail(executor).map(f, executor)
-        push(newHead, getTail, executor)
-      }
-    })(executor), executor)
+    new AsyncList(() => {
+      this.value.map(maybeList => {
+        maybeList.map(list => {
+          (f(list._1), list._2.map(f, executor))
+        })
+      })(executor)
+    })
   }
 
-
   def filter(f: T=>Boolean, executor: ExecutionContext): AsyncList[T] = {
-    unfuture(this.value.map(value => {
-      if(value.isEmpty) {
-        empty[T]
-      } else {
-        val head = value.get._1
-        val filterTail = () => value.get._2().filter(f, executor)
-        if(f(value.get._1)) {
-          new AsyncList(Future.successful(Some(head, filterTail)))
-        } else {
-          filterTail()
-        }
-      }
-
-    })(executor), executor)
+    new AsyncList[T](() => {
+      stargate.util.flatten(this.value.map(maybeList => {
+        maybeList.map(list => {
+          val tail = list._2.filter(f, executor)
+          if(f(list._1)) {
+            Future.successful(Some((list._1, tail)))
+          } else {
+            tail.value
+          }
+        })
+      })(executor), executor)
+    })
   }
 
   // note: causes whole list to be read eagerly
   def foldLeft[T2](init: T2)(f: (T2, T) => T2, executor: ExecutionContext): Future[T2] = {
-    this.isEmpty(executor).flatMap(isEmpty => {
-      if(isEmpty) {
-        Future.successful(init)
-      } else {
-        this.head(executor).flatMap(head => {
-          val next = f(init, head)
-          this.tail(executor).foldLeft(next)(f, executor)
-        })(executor)
-      }
+    this.value.flatMap(maybeList => {
+      maybeList.map(list => {
+        val next = f(init, list._1)
+        list._2.foldLeft(next)(f, executor)
+      }).getOrElse(Future.successful(init))
     })(executor)
   }
 
@@ -98,20 +97,14 @@ class AsyncList[T] private (private val value: Future[Option[(T, () => AsyncList
   }
 
   def splitAt(index: Int, executor: ExecutionContext): (Future[List[T]], AsyncList[T]) = {
-    val wrapped: Future[(List[T], AsyncList[T])] = if(index <= 0) {
-      Future.successful((List.empty, this))
+    val wrapped = if(index <= 0) {
+      Future.successful(List.empty, this)
     } else {
-      this.isEmpty(executor).flatMap(isEmpty => {
-        if (isEmpty) {
-          Future.successful((List.empty[T], empty[T]))
-        } else {
-          implicit val ec: ExecutionContext = executor
-          for {
-            head <- this.head(executor)
-            recurse = this.tail(executor).splitAt(index - 1, executor)
-            restOfHead <- recurse._1
-          } yield (head +: restOfHead, recurse._2)
-        }
+      this.value.flatMap(maybeList => {
+        maybeList.map(list => {
+          val recurse = list._2.splitAt(index - 1, executor)
+          recurse._1.map(take => (list._1 +: take, recurse._2))(executor)
+        }).getOrElse(Future.successful((List.empty, this)))
       })(executor)
     }
     (wrapped.map(_._1)(executor), unfuture(wrapped.map(_._2)(executor), executor))
@@ -120,17 +113,25 @@ class AsyncList[T] private (private val value: Future[Option[(T, () => AsyncList
   def take(index: Int, executor: ExecutionContext): Future[List[T]] = this.splitAt(index, executor)._1
   def drop(index: Int, executor: ExecutionContext): AsyncList[T] = this.splitAt(index, executor)._2
 
+  def span(predicate: T => Boolean, executor: ExecutionContext): (Future[List[T]],AsyncList[T]) = {
+    val wrapped = this.value.flatMap(maybeList => {
+      maybeList.map(list => {
+        if(predicate(list._1)) {
+          val recurse = list._2.span(predicate, executor)
+          recurse._1.map(take => (list._1 +: take, recurse._2))(executor)
+        } else {
+          Future.successful(List.empty, this)
+        }
+      }).getOrElse(Future.successful(List.empty, this))
+    })(executor)
+    (wrapped.map(_._1)(executor), unfuture(wrapped.map(_._2)(executor), executor))
+  }
+
   def toList(executor: ExecutionContext): Future[List[T]] = {
-    this.isEmpty(executor).flatMap(isEmpty => {
-      if(isEmpty) {
-        Future.successful(List.empty)
-      } else {
-        implicit val ec: ExecutionContext = executor
-        for {
-          head <- this.head(executor)
-          tail <- this.tail(executor).toList(executor)
-        } yield (List(head) ++ tail)
-      }
+    this.value.flatMap(maybeList => {
+      maybeList.map(list => {
+        list._2.toList(executor).map(tail => list._1 +: tail)(executor)
+      }).getOrElse(Future.successful(List.empty))
     })(executor)
   }
 
@@ -149,39 +150,46 @@ class AsyncList[T] private (private val value: Future[Option[(T, () => AsyncList
 
 object AsyncList {
 
-  def empty[T] = new AsyncList[T](Future.successful(None))
+  def empty[T] = new AsyncList[T](() => Future.successful(None))
 
-  def singleton[T](single: Future[T], executor: ExecutionContext): AsyncList[T] = {
-    push(single, ()=>empty[T], executor)
+  def apply[T](getValue: () => Future[Option[(T,AsyncList[T])]]): AsyncList[T] = new AsyncList[T](getValue)
+
+  def singleton[T](single: () => Future[T], executor: ExecutionContext): AsyncList[T] = {
+    pushLazy(single, empty[T], executor)
   }
   def singleton[T](single: T): AsyncList[T] = {
-    new AsyncList[T](Future.successful(Some((single, ()=>empty))))
+    new AsyncList[T](() => Future.successful(Some((single, empty))))
   }
 
-  def push[T](head: Future[T], getTail: () => AsyncList[T], executor: ExecutionContext): AsyncList[T] = {
-    new AsyncList[T](head.map(Some(_, getTail))(executor))
+  def pushLazy[T](head: () => Future[T], tail: AsyncList[T], executor: ExecutionContext): AsyncList[T] = {
+    new AsyncList[T](() => head().map(head => Some(head, tail))(executor))
   }
-
-  def append[T](a: AsyncList[T], b: () => AsyncList[T], executor: ExecutionContext): AsyncList[T] = {
-    unfuture(a.isEmpty(executor).map(isEmpty => {
-      if(isEmpty) {
-        b()
-      } else {
-        push(a.head(executor), () => append(a.tail(executor), b, executor), executor)
-      }
-    })(executor), executor)
+  def push[T](head: T, tail: AsyncList[T], executor: ExecutionContext): AsyncList[T] = {
+    pushLazy(() => Future.successful(head), tail, executor)
   }
 
   def append[T](a: AsyncList[T], b: AsyncList[T], executor: ExecutionContext): AsyncList[T] = {
-    append(a, ()=>b, executor)
+    new AsyncList(() => {
+      a.value.flatMap(maybeList => {
+        maybeList.map(list => {
+          Future.successful(Some((list._1, append(list._2, b, executor))))
+        }).getOrElse(b.value)
+      })(executor)
+    })
   }
 
   def flatten[T](lists: AsyncList[AsyncList[T]], executor: ExecutionContext): AsyncList[T] = {
-    unfuture(lists.isEmpty(executor).flatMap(isEmpty => if(isEmpty) {
-      Future.successful(empty[T])
-    } else {
-      lists.head(executor).map(head => append(head, ()=>flatten(lists.tail(executor), executor), executor))(executor)
-    })(executor), executor)
+    new AsyncList(() => {
+      lists.value.flatMap(maybeListOfLists => {
+        maybeListOfLists.map(listOfLists => {
+          listOfLists._1.value.flatMap(maybeInner => {
+            maybeInner.map(inner => {
+              Future.successful(Some((inner._1, flatten(push(inner._2, listOfLists._2, executor), executor))))
+            }).getOrElse(flatten(listOfLists._2, executor).value)
+          })(executor)
+        }).getOrElse(Future.successful(None))
+      })(executor)
+    })
   }
 
   def filterSome[T](list: AsyncList[Option[T]], executor: ExecutionContext): AsyncList[T] = {
@@ -189,23 +197,23 @@ object AsyncList {
   }
 
   def unfuture[T](futureList: Future[AsyncList[T]], executor: ExecutionContext): AsyncList[T] = {
-    new AsyncList(futureList.flatMap(_.value)(executor))
+    new AsyncList(() => futureList.flatMap(_.value)(executor))
   }
   def unfuture[T](futureList: AsyncList[Future[T]], executor: ExecutionContext): AsyncList[T] = {
-    new AsyncList(futureList.value.flatMap(value => {
-      if(value.isEmpty) {
-        Future.successful(None)
-      } else {
-        value.get._1.map(head => Some((head, () => unfuture(value.get._2(), executor))))(executor)
-      }
-    })(executor))
+    new AsyncList(() => {
+      futureList.value.flatMap(maybeList => {
+        maybeList.map(list => {
+          list._1.map(value => Some((value, unfuture(list._2, executor))))(executor)
+        }).getOrElse(Future.successful(None))
+      })(executor)
+    })
   }
 
   def fromList[T](list: List[T]): AsyncList[T] = {
     if(list.isEmpty) {
       empty[T]
     } else {
-      new AsyncList[T](Future.successful(Some((list.head, () => fromList(list.tail)))))
+      new AsyncList[T](() => Future.successful(Some((list.head, fromList(list.tail)))))
     }
   }
 }

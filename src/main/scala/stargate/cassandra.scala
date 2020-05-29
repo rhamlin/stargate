@@ -117,20 +117,22 @@ object cassandra extends LazyLogging {
   val schemaOpTimeout: java.time.Duration = java.time.Duration.ofSeconds(10)
   type PagedResults[T] = AsyncList[T]
 
-  def convertAsyncResultSet(resultSet: Future[AsyncResultSet], executor: ExecutionContext): PagedResults[Row] = {
-    AsyncList.unfuture(resultSet.map(ars => {
-      val head = AsyncList.fromList(ars.currentPage().asScala.toList)
-      val tail = if (ars.hasMorePages) {
-        () => convertAsyncResultSet(ars.fetchNextPage().asScala, executor)
-      } else {
-        () => AsyncList.empty[Row]
-      }
-      AsyncList.append(head, tail, executor)
-    })(executor), executor)
+  def convertAsyncResultSetPages(resultSet: Future[AsyncResultSet], executor: ExecutionContext): AsyncList[AsyncList[Row]] = {
+    AsyncList[AsyncList[Row]](() => {
+      resultSet.map(ars => {
+        val head = AsyncList.fromList(ars.currentPage().asScala.toList)
+        val tail = if (ars.hasMorePages) {
+          convertAsyncResultSetPages(ars.fetchNextPage().asScala, executor)
+        } else {
+          AsyncList.empty[AsyncList[Row]]
+        }
+        Some((head, tail))
+      })(executor)
+    })
   }
 
-  def convertAsyncResultSet(resultSet: CompletionStage[AsyncResultSet], executor: ExecutionContext): PagedResults[Row] = {
-    convertAsyncResultSet(resultSet.asScala, executor)
+  def convertAsyncResultSet(resultSet: CompletionStage[AsyncResultSet], executor: ExecutionContext): AsyncList[Row] = {
+    AsyncList.flatten(convertAsyncResultSetPages(resultSet.asScala, executor), executor)
   }
 
     /**
