@@ -22,7 +22,7 @@ import com.datastax.oss.driver.api.core.CqlSession
 import com.datastax.oss.driver.api.core.`type`.DataTypes
 import com.datastax.oss.driver.api.querybuilder.QueryBuilder
 import com.datastax.oss.driver.api.querybuilder.term.Term
-import stargate.cassandra.{CassandraColumn, CassandraColumns, CassandraKey, CassandraTable}
+import stargate.cassandra.{CassandraColumn, CassandraColumns, CassandraKey, CassandraTable, DefaultCassandraColumn}
 import stargate.model.{ScalarComparison, ScalarCondition}
 import stargate.query.{read, write}
 import stargate.{cassandra, model}
@@ -40,8 +40,8 @@ object datamodelRepository {
 
   def repoTable(keyspace: String): CassandraTable = {
     CassandraTable(keyspace, TABLE_NAME, CassandraColumns(
-      CassandraKey(List(CassandraColumn(NAME_COLUMN, DataTypes.TEXT)), List(CassandraColumn(TIMESTAMP_COLUMN, DataTypes.TIMESTAMP))),
-      List(CassandraColumn(DATAMODEL_COLUMN, DataTypes.TEXT))
+      CassandraKey(List(DefaultCassandraColumn(NAME_COLUMN, DataTypes.TEXT)), List(DefaultCassandraColumn(TIMESTAMP_COLUMN, DataTypes.TIMESTAMP))),
+      List(DefaultCassandraColumn(DATAMODEL_COLUMN, DataTypes.TEXT))
     ))
   }
   def ensureRepoTableExists(keyspace: String, replication: Int, session: CqlSession, executor: ExecutionContext): Future[CassandraTable] = {
@@ -60,13 +60,13 @@ object datamodelRepository {
     Await.result(updateDatamodel(appName, datamodel, repoTable, session, executor), Duration.Inf)
   }
 
-  def fetchDatamodels(condition: List[ScalarCondition[Term]], repoTable: CassandraTable, session: CqlSession, executor: ExecutionContext): Future[Map[(String,Instant),String]] = {
+  def fetchDatamodels(condition: List[ScalarCondition[Object]], repoTable: CassandraTable, session: CqlSession, executor: ExecutionContext): Future[Map[(String,Instant),String]] = {
     val rows = cassandra.queryAsync(session, read.selectStatement(repoTable.keyspace, repoTable.name, condition).build, executor)
     rows.toList(executor).map(_.map(cassandra.rowToMap).map(row =>
       ((row(NAME_COLUMN).asInstanceOf[String], row(TIMESTAMP_COLUMN).asInstanceOf[Instant]), row(DATAMODEL_COLUMN).asInstanceOf[String]))
       .toMap)(executor)
   }
-  def fetchLatestDatamodels(condition: List[ScalarCondition[Term]], repoTable: CassandraTable, session: CqlSession, executor: ExecutionContext): Future[Map[String,String]] = {
+  def fetchLatestDatamodels(condition: List[ScalarCondition[Object]], repoTable: CassandraTable, session: CqlSession, executor: ExecutionContext): Future[Map[String,String]] = {
     fetchDatamodels(condition, repoTable, session, executor).map(byNameAndTime => {
       val latestTimes = byNameAndTime.toList.groupMap(_._1._1)(_._1._2).view.mapValues(_.max).toMap
       latestTimes.map((nameTime:(String,Instant)) => (nameTime._1, byNameAndTime(nameTime._1, nameTime._2)))
@@ -74,11 +74,11 @@ object datamodelRepository {
   }
 
   def fetchDatamodel(appName: String, repoTable: CassandraTable, session: CqlSession, executor: ExecutionContext): Future[List[(Instant,String)]] = {
-    val condition = List(ScalarCondition[Term](NAME_COLUMN, ScalarComparison.EQ, QueryBuilder.literal(appName)))
+    val condition = List(ScalarCondition[Object](NAME_COLUMN, ScalarComparison.EQ, appName))
     fetchDatamodels(condition, repoTable, session, executor).map(_.toList.map(ntc => (ntc._1._2, ntc._2)))(executor)
   }
   def fetchLatestDatamodel(appName: String, repoTable: CassandraTable, session: CqlSession, executor: ExecutionContext): Future[Option[String]] = {
-    val condition = List(ScalarCondition[Term](NAME_COLUMN, ScalarComparison.EQ, QueryBuilder.literal(appName)))
+    val condition = List(ScalarCondition[Object](NAME_COLUMN, ScalarComparison.EQ, appName))
     fetchLatestDatamodels(condition, repoTable, session, executor).map(_.headOption.map(_._2))(executor)
   }
 
@@ -86,7 +86,7 @@ object datamodelRepository {
   def fetchAllLatestDatamodels(repoTable: CassandraTable, session: CqlSession, executor: ExecutionContext): Future[Map[String,String]] = fetchLatestDatamodels(List.empty, repoTable, session, executor)
 
   def deleteDatamodel(appName:String, repoTable: CassandraTable, session: CqlSession, executor: ExecutionContext): Future[Unit] = {
-    val statement = write.deleteStatement(repoTable.keyspace, repoTable.name, List(ScalarCondition[Term](NAME_COLUMN, ScalarComparison.EQ, QueryBuilder.literal(appName))))
+    val statement = write.deleteStatement(repoTable.keyspace, repoTable.name, List(ScalarCondition[Object](NAME_COLUMN, ScalarComparison.EQ, appName)))
     cassandra.executeAsync(session, statement.build, executor)
   }
 }

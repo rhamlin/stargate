@@ -16,7 +16,7 @@
 
 package stargate
 
-import stargate.cassandra.{CassandraColumn, CassandraTable}
+import stargate.cassandra.{CassandraColumn, CassandraTable, DefaultCassandraColumn}
 import stargate.service.validations
 import stargate.util.AsyncList
 import com.datastax.oss.driver.api.core.CqlSession
@@ -42,7 +42,7 @@ package object model {
     val SHORT = new Value("short", DataTypes.SMALLINT, validations.smallInt)
     val STRING = new Value("string", DataTypes.TEXT, validations.text)
     val TIME = new Value("time", DataTypes.TIME, validations.time)
-    val TIMESTAMP = new Value("timestamp", DataTypes.TIME, validations.timestamp)
+    val TIMESTAMP = new Value("timestamp", DataTypes.TIMESTAMP, validations.timestamp)
     val UUID = new Value("uuid", DataTypes.UUID, validations.uuid)
     var BIG_INT = new Value("big_int", DataTypes.VARINT, validations.varInt)
 
@@ -51,7 +51,7 @@ package object model {
     def fromString(name: String) = names(name)
   }
   case class ScalarField(name: String, scalarType: ScalarType.Value) {
-    def column: CassandraColumn = CassandraColumn(name, scalarType.cassandra)
+    def column: CassandraColumn = DefaultCassandraColumn(name, scalarType.cassandra)
     def rename(newName: String) = ScalarField(newName, scalarType)
   }
   case class RelationField(name: String, targetEntityName: String, inverseName: String)

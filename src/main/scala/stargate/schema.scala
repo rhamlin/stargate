@@ -31,10 +31,10 @@ object schema {
   val RELATION_SPLIT_REGEX = "\\."
 
   def baseTableName(entityName: String) = entityName
-  val baseTableKey = CassandraKey(List(CassandraColumn(ENTITY_ID_COLUMN_NAME, DataTypes.UUID)), List.empty)
+  val baseTableKey = CassandraKey(List(DefaultCassandraColumn(ENTITY_ID_COLUMN_NAME, DataTypes.UUID)), List.empty)
   def viewTableName(entityName: String, key: CassandraKeyNames) = entityName + "_" + key.partitionKeys.mkString("_") + "_" + key.clusteringKeys.mkString("_")
   def relationTableName(entityName: String, relationName: String) = entityName + "_" + relationName
-  val relationTableKey = CassandraKey(List(CassandraColumn(RELATION_FROM_COLUMN_NAME, DataTypes.UUID)), List(CassandraColumn(RELATION_TO_COLUMN_NAME, DataTypes.UUID)))
+  val relationTableKey = CassandraKey(List(DefaultCassandraColumn(RELATION_FROM_COLUMN_NAME, DataTypes.UUID)), List(DefaultCassandraColumn(RELATION_TO_COLUMN_NAME, DataTypes.UUID)))
   val relationTableColumns = CassandraColumns(relationTableKey, List.empty)
   val relationTableTypes = Map((RELATION_FROM_COLUMN_NAME, DataTypes.UUID), (RELATION_TO_COLUMN_NAME, DataTypes.UUID))
 
@@ -154,7 +154,7 @@ object schema {
       val keyNames = Try(appendEntityIdKey(conditionsKey(path_conds._2, model.cardinality(entityName, _), minPartitions)))
       require(keyNames.isSuccess, s"failed to create view for condition ${conditions} on entity ${rootEntity}:\n${keyNames.failed.get}")
       val tableName = viewTableName(entityName, keyNames.get)
-      def nameToCol(name: String) = CassandraColumn(name, model.fieldColumnType(entityName, name))
+      def nameToCol(name: String): CassandraColumn = (if(name == ENTITY_ID_COLUMN_NAME) DefaultCassandraColumn.apply _ else OptionalCassandraColumn.apply _)(name, model.fieldColumnType(entityName, name))
       val key = CassandraKey(keyNames.get.partitionKeys.map(nameToCol), keyNames.get.clusteringKeys.map(nameToCol))
       val columns = CassandraColumns(key, List.empty)
       (entityName, CassandraTable(keyspace, tableName, columns))

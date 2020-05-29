@@ -20,8 +20,6 @@ import java.util.UUID
 
 import com.datastax.oss.driver.api.core.CqlSession
 import com.datastax.oss.driver.api.core.cql.{BatchStatementBuilder, BatchType, SimpleStatement}
-import com.datastax.oss.driver.api.querybuilder.QueryBuilder
-import com.datastax.oss.driver.api.querybuilder.term.Term
 import com.datastax.oss.driver.internal.core.util.Strings
 import com.typesafe.scalalogging.Logger
 import stargate.model._
@@ -40,7 +38,7 @@ package object query {
 
 
   // for a root-entity and relation path, apply selection conditions to get list of ids of the target entity type
-  def matchEntities(model: OutputModel, rootEntityName: String, relationPath: List[String], conditions: List[ScalarCondition[Term]], session: CqlSession, executor: ExecutionContext): AsyncList[UUID] = {
+  def matchEntities(model: OutputModel, rootEntityName: String, relationPath: List[String], conditions: List[ScalarCondition[Object]], session: CqlSession, executor: ExecutionContext): AsyncList[UUID] = {
     // TODO: when condition is just List((entityId, =, _)) or List((entityId, IN, _)), then return the ids in condition immediately without querying
     val entityName = schema.traverseEntityPath(model.input.entities, rootEntityName, relationPath)
     val entityTables = model.entityTables(entityName)
@@ -48,7 +46,7 @@ package object query {
     val bestScore = tableScores.keys.min
     // TODO: cache mapping of conditions to best table in OutputModel
     val bestTable = tableScores(bestScore).head
-    var selection = read.selectStatement(bestTable.keyspace, bestTable.name, conditions)
+    var selection = read.selectStatement(bestTable, conditions)
     if(!bestScore.perfect) {
       logger.warn(s"failed to find index for entity '${entityName}' with conditions ${conditions}, best match was: ${bestTable}")
       selection = selection.allowFiltering
@@ -84,8 +82,7 @@ package object query {
   def matchEntities(model: OutputModel, entityName: String, conditions: GroupedConditions[Object], session: CqlSession, executor: ExecutionContext): AsyncList[UUID] = {
     val groupedEntities = conditions.toList.map(path_conds => {
       val (path, conditions) = path_conds
-      val termConditions = conditions.map(read.termCondition)
-      (path, matchEntities(model, entityName, path, termConditions, session, executor))
+      (path, matchEntities(model, entityName, path, conditions, session, executor))
     }).toMap
     val rootIds = groupedEntities.toList.map(path_ids => resolveReverseRelations(model, entityName, path_ids._1, path_ids._2, session, executor))
     // TODO: streaming intersection

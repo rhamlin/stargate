@@ -16,89 +16,100 @@
 package stargate 
 
 import java.net.InetSocketAddress
+import java.util.Collections
 import java.util.concurrent.CompletionStage
 
+import com.datastax.oss.driver.api.core.`type`.{DataType, DataTypes}
 import com.datastax.oss.driver.api.core.cql.{AsyncResultSet, Row, SimpleStatement, Statement}
 import com.datastax.oss.driver.api.core.{CqlSession, CqlSessionBuilder}
 import com.datastax.oss.driver.api.querybuilder.SchemaBuilder
 import com.datastax.oss.driver.api.querybuilder.schema.CreateTable
 import com.datastax.oss.driver.internal.core.util.Strings
+import com.typesafe.scalalogging.LazyLogging
+import stargate.service.config.ParsedStargateConfig
 import stargate.util.AsyncList
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.jdk.FutureConverters._
-import stargate.service.config.ParsedStargateConfig
-import com.typesafe.scalalogging.LazyLogging
-import com.datastax.oss.driver.api.core.`type`.DataType
 
 /**
   * provides most of the cassandra query methods and schema modification support
   */
 object cassandra extends LazyLogging {
 
-/**
-  * 
-  *
-  * @param name name of the column
-  * @param type cassandra data type that is in use
-  */
-final case class CassandraColumn(name: String, `type`: DataType)
-
-final case class CassandraColumnNames(key: CassandraKeyNames, data: List[String]) {
-    def combined: List[String] = key.combined ++ data
+  /**
+   * @param partitionKeys list of CassandraColumn that match to the partition key in an actual Apache Cassandra table.
+   * @param clusteringKeys list of clustering keys that match to the clustering columns in an actual Apache Cassandra table.
+   */
+  final case class CassandraKeyNames(partitionKeys: List[String], clusteringKeys: List[String]) {
+    val combined: List[String] = partitionKeys ++ clusteringKeys
+    val combinedSet: Set[String] = combined.toSet
+  }
+  final case class CassandraColumnNames(key: CassandraKeyNames, data: List[String]) {
+    val combined: List[String] = key.combined ++ data
+    val combinedSet: Set[String] = combined.toSet
   }
 
-/**
-  * 
-  *
-  * @param partitionKeys list of CassandraColumn that match to the partition key in an actual Apache Cassandra table.
-  * @param clusteringKeys list of clustering keys that match to the clustering columns in an actual Apache Cassandra table.
-  */
-final case class CassandraKey(partitionKeys: List[CassandraColumn], clusteringKeys: List[CassandraColumn]) {
-    def names: CassandraKeyNames = CassandraKeyNames(partitionKeys.map(_.name), clusteringKeys.map(_.name))
-    def combined: List[CassandraColumn] = (partitionKeys ++ clusteringKeys)
+  trait CassandraColumn {
+    val name: String
+    val `type`: DataType
+    def physicalType: DataType = `type`
+    def physicalValue(o: Object): Object = o
+  }
+  /**
+   * @param name name of the column
+   * @param type cassandra data type that is in use
+   */
+  case class DefaultCassandraColumn(override val name: String, override val `type`: DataType) extends CassandraColumn
+  case class OptionalCassandraColumn(override val name: String, override val `type`: DataType) extends CassandraColumn {
+    override def physicalType: DataType = DataTypes.frozenListOf(`type`)
+    override def physicalValue(o: Object): Object = if(o == null) Collections.EMPTY_LIST else List(o).asJava
   }
 
-/**
-  * 
-  *
-  * @param partitionKeys list of CassandraColumn that match to the partition key in an actual Apache Cassandra table.
-  * @param clusteringKeys list of clustering keys that match to the clustering columns in an actual Apache Cassandra table.
-  */
-final  case class CassandraKeyNames(partitionKeys: List[String], clusteringKeys: List[String]) {
-    def combined: List[String] = (partitionKeys ++ clusteringKeys)
-}
+  /**
+    * @param partitionKeys list of CassandraColumn that match to the partition key in an actual Apache Cassandra table.
+    * @param clusteringKeys list of clustering keys that match to the clustering columns in an actual Apache Cassandra table.
+    */
+  final case class CassandraKey(partitionKeys: List[CassandraColumn], clusteringKeys: List[CassandraColumn]) {
+    val partitionKeyMap: Map[String, CassandraColumn] = partitionKeys.map(c => (c.name, c)).toMap
+    val clusteringKeyMap: Map[String, CassandraColumn] = clusteringKeys.map(c => (c.name, c)).toMap
+    val names: CassandraKeyNames = CassandraKeyNames(partitionKeys.map(_.name), clusteringKeys.map(_.name))
+    val combined: List[CassandraColumn] = (partitionKeys ++ clusteringKeys)
+    val combinedMap: Map[String, CassandraColumn] = partitionKeyMap ++ clusteringKeyMap
+    def fullKeyPhysicalValues(values: Map[String,Object]): Map[String,Object] = this.combinedMap.view.mapValues(col => col.physicalValue(values.get(col.name).orNull)).toMap
 
-/**
-  * 
-  *
-  * @param key 
-  * @param data
-  */
-final case class CassandraColumns(key: CassandraKey, data: List[CassandraColumn]) {
-    def names: CassandraColumnNames = CassandraColumnNames(key.names, data.map(_.name))
-    def combined: List[CassandraColumn] = key.combined ++ data
   }
 
-/**
-  * 
-  *
-  * @param keyspace name that maps to keyspace where the table is located
-  * @param name name that maps to actual Apache Cassandra table
-  * @param columns columns that map to the actual table
-  */
-final case class CassandraTable(keyspace: String, name: String, columns: CassandraColumns)
+  /**
+    * @param key
+    * @param data
+    */
+  final case class CassandraColumns(key: CassandraKey, data: List[CassandraColumn]) {
+    val dataMap: Map[String,CassandraColumn] = data.map(c => (c.name, c)).toMap
+    val names: CassandraColumnNames = CassandraColumnNames(key.names, data.map(_.name))
+    val combined: List[CassandraColumn] = key.combined ++ data
+    val combinedMap: Map[String,CassandraColumn] = key.combinedMap ++ dataMap
+    def fullKeyPhysicalValues(values: Map[String,Object]): Map[String,Object] = {
+      val dataValues: Map[String,Object] = this.dataMap.filter(kv => values.contains(kv._1)).map(kv => (kv._1, kv._2.physicalValue(values(kv._1))))
+      this.key.fullKeyPhysicalValues(values) ++ dataValues
+    }
+  }
 
-/**
-  * 
-  *
-  * @param missingColumns
-  * @param missingKeys
-  * @param missingPartitionKeys
-  * @param skipped
-  */
-final case class KeyConditionScore(missingColumns: Int, missingKeys: Int, missingPartitionKeys: Boolean, skipped: Int) extends Ordered[KeyConditionScore] {
+  /**
+    * @param keyspace name that maps to keyspace where the table is located
+    * @param name name that maps to actual Apache Cassandra table
+    * @param columns columns that map to the actual table
+    */
+  final case class CassandraTable(keyspace: String, name: String, columns: CassandraColumns)
+
+  /**
+    * @param missingColumns
+    * @param missingKeys
+    * @param missingPartitionKeys
+    * @param skipped
+    */
+  final case class KeyConditionScore(missingColumns: Int, missingKeys: Int, missingPartitionKeys: Boolean, skipped: Int) extends Ordered[KeyConditionScore] {
     def perfect: Boolean = (missingColumns + missingKeys + skipped) == 0 && !missingPartitionKeys
     def tuple: (Int, Int, Boolean, Int) = (missingColumns, missingKeys, missingPartitionKeys, skipped)
     override def compare(that: KeyConditionScore): Int = Ordering[(Int,Int,Boolean,Int)].compare(this.tuple, that.tuple)
@@ -122,7 +133,7 @@ final case class KeyConditionScore(missingColumns: Int, missingKeys: Int, missin
     convertAsyncResultSet(resultSet.asScala, executor)
   }
 
-  /**
+    /**
     * map row to an object map
     *
     * @param row row from the database
@@ -164,14 +175,13 @@ final case class KeyConditionScore(missingColumns: Int, missingKeys: Int, missin
     */
   def createTableStatement(table: CassandraTable): SimpleStatement = {
     val base = SchemaBuilder.createTable(Strings.doubleQuote(table.keyspace), Strings.doubleQuote(table.name)).ifNotExists().asInstanceOf[CreateTable]
-    val partitionKeys = table.columns.key.partitionKeys.foldLeft(base)((builder, next) => builder.withPartitionKey(Strings.doubleQuote(next.name), next.`type`))
-    val clusteringKeys = table.columns.key.clusteringKeys.foldLeft(partitionKeys)((builder, next) => builder.withClusteringColumn(Strings.doubleQuote(next.name), next.`type`))
+    val partitionKeys = table.columns.key.partitionKeys.foldLeft(base)((builder, next) => builder.withPartitionKey(Strings.doubleQuote(next.name), next.physicalType))
+    val clusteringKeys = table.columns.key.clusteringKeys.foldLeft(partitionKeys)((builder, next) => builder.withClusteringColumn(Strings.doubleQuote(next.name), next.physicalType))
     val dataCols = table.columns.data.foldLeft(clusteringKeys)((builder, next) => builder.withColumn(Strings.doubleQuote(next.name), next.`type`))
     dataCols.build.setTimeout(schemaOpTimeout)
   }
 
   /**
-    * 
     * creates a new table but do so asynchronously
     * 
     * @param session active CQL session

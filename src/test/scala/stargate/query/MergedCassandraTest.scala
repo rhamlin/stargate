@@ -25,7 +25,8 @@ class MergedCassandraTest
   with EntityCRUDTestTrait
   with PaginationTestTrait
   with PredefinedQueryTestTrait
-  with ReadWriteTestTrait {
+  with ReadWriteTestTrait
+  with NullKeysTestTrait {
 
   override def session: CqlSession = MergedCassandraTest.session
   override def newKeyspace: String = MergedCassandraTest.newKeyspace

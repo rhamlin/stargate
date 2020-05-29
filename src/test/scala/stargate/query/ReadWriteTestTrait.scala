@@ -44,8 +44,8 @@ trait ReadWriteTestTrait extends CassandraTestSession {
         val future = statements.map(cassandra.executeAsync(session, _, executor))
         Await.result(Future.sequence(future), Duration.Inf)
         tables.foreach(table => {
-          val conditions = stargate.query.write.tableConditionsForEntity(table, payload).map(_.get)
-          val select = stargate.query.read.selectStatement(table.keyspace, table.name, conditions).build
+          val conditions = stargate.query.read.tableConditionsForEntity(table, payload).map(_.get)
+          val select = stargate.query.read.selectStatement(table, conditions).build
           val rs = session.execute(select)
           assert(rs.iterator.asScala.toList.length == 1)
         })
@@ -53,8 +53,8 @@ trait ReadWriteTestTrait extends CassandraTestSession {
         val deleted = deleteStatements.map(cassandra.executeAsync(session, _, executor))
         Await.result(Future.sequence(deleted), Duration.Inf)
         tables.foreach(table => {
-          val conditions = stargate.query.write.tableConditionsForEntity(table, payload).map(_.get)
-          val select = stargate.query.read.selectStatement(table.keyspace, table.name, conditions).build
+          val conditions = stargate.query.read.tableConditionsForEntity(table, payload).map(_.get)
+          val select = stargate.query.read.selectStatement(table, conditions).build
           val rs = session.execute(select)
           assert(rs.iterator.asScala.toList.isEmpty)
         })
