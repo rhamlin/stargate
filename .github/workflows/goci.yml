@@ -8,14 +8,17 @@
 #   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
-name: Go Release
+
+name: Go CI
 
 on:
   push:
-    tags: [ '*' ]
-
+    branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
+  
 jobs:
-  goreleaser:
+  test:
     runs-on: ubuntu-latest
     steps:
       -
@@ -30,10 +33,5 @@ jobs:
         with:
           go-version: 1.14
       -
-        name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v1.5.0
-        with:
-          version: latest
-          args: release --rm-dist
-        env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+        name: test
+        run: go test ./... -cover
