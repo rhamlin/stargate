@@ -12,8 +12,6 @@
 name: Go CI
 
 on:
-  push:
-    branches: [ '*' ]
   pull_request:
     branches: [ '*' ]
   

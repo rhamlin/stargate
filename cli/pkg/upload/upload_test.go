@@ -42,6 +42,7 @@ func (suite *UploadSuite) SetupSuite() {
 	if err != nil {
 		log.Fatalf("unable to start cassandra %s", err)
 	}
+	time.Sleep(50 * time.Second)
 	err = client.StartService(&docker.StartServiceOptions{
 		CassandraURL:    "stargate-cassandra",
 		ExposedPorts:    []string{"8080"},
@@ -51,8 +52,8 @@ func (suite *UploadSuite) SetupSuite() {
 	if err != nil {
 		log.Fatalf("unable to start service %s", err)
 	}
+	time.Sleep(30 * time.Second)
 	suite.client = client
-	time.Sleep(50 * time.Second)
 }
 
 func (suite *UploadSuite) TearDownSuite() {
