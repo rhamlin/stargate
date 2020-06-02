@@ -15,9 +15,11 @@
 package upload
 
 import (
+	"log"
 	"testing"
 	"time"
 
+	"github.com/datastax/stargate/cli/pkg/config"
 	"github.com/datastax/stargate/cli/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -31,34 +33,34 @@ type UploadSuite struct {
 func (suite *UploadSuite) SetupSuite() {
 	client, err := docker.NewClient()
 	if err != nil {
-		panic(1)
+		log.Fatalf("unable to connect to docker %s", err)
 	}
 	err = client.StartCassandra(&docker.StartCassandraOptions{
-		DockerImageHost: "docker.io/library/",
-		ImageName:       "cassandra",
+		DockerImageHost: "",
+		ImageName:       config.CassandraImage(),
 	})
 	if err != nil {
-		panic(1)
+		log.Fatalf("unable to start cassandra %s", err)
 	}
 	err = client.StartService(&docker.StartServiceOptions{
 		CassandraURL:    "stargate-cassandra",
 		ExposedPorts:    []string{"8080"},
-		DockerImageHost: "docker.io/",
-		ImageName:       "service",
+		DockerImageHost: "",
+		ImageName:       config.StargateImage(),
 	})
 	if err != nil {
-		panic(1)
+		log.Fatalf("unable to start service %s", err)
 	}
 	suite.client = client
-	time.Sleep(20 * time.Second)
+	time.Sleep(50 * time.Second)
 }
 
 func (suite *UploadSuite) TearDownSuite() {
-	suite.client.Remove("service")
-	suite.client.Remove("cassandra")
+	suite.client.Remove(config.StargateContainerName())
+	suite.client.Remove(config.CassandraContainerName())
 }
 
-const validHost = "http://localhost:8080/test"
+const validHost = "http://localhost:8080/v1/api/test/schema"
 const validPath = "../../../src/main/resources/schema.conf"
 
 func (suite *UploadSuite) TestInvalidPathInput() {

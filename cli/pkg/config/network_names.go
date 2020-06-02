@@ -12,20 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package docker
+package config
 
-import (
-	"time"
-)
+var sgNetwork = "stargate"
+var cassandraNetwork = "stargate-cassandra"
 
-// Stop running docker image
-func (client *Client) Stop(container string) error {
-	t, err := time.ParseDuration("3s")
-	if err != nil {
-		return err
-	}
+func StargateNetworkName() string {
+	return sgNetwork
+}
 
-	cli := client.cli
-	ctx := client.ctx
-	return cli.ContainerStop(ctx, container, &t)
+func CassandraNetwork() string {
+	return cassandraNetwork
 }

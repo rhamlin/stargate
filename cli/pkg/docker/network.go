@@ -15,33 +15,46 @@
 package docker
 
 import (
+	"fmt"
+
+	"github.com/datastax/stargate/cli/pkg/config"
 	"github.com/docker/docker/api/types"
 )
+
+func (client *Client) networkExists(name string) (bool, error) {
+	cli := client.cli
+	ctx := client.ctx
+	networks, err := cli.NetworkList(ctx, types.NetworkListOptions{})
+	if err != nil {
+		return false, err
+	}
+	networkFound := false
+	for _, n := range networks {
+		fmt.Printf("network %s\n", n.Name)
+		if n.Name == config.StargateNetworkName() {
+			networkFound = true
+			break
+		}
+	}
+	return networkFound, nil
+}
 
 // EnsureNetwork checks to see if the stargate bridge network exists and creates it if it doesnt
 func (client *Client) EnsureNetwork() error {
 	cli := client.cli
 	ctx := client.ctx
-
-	networks, err := cli.NetworkList(ctx, types.NetworkListOptions{})
+	networkName := config.StargateNetworkName()
+	networkFound, err := client.networkExists(networkName)
 	if err != nil {
 		return err
 	}
 
-	networkFound := false
-
-	for _, n := range networks {
-		if n.Name == "stargate" {
-			networkFound = true
-			break
-		}
-	}
 	if !networkFound {
-		_, err := cli.NetworkCreate(ctx, "stargate", types.NetworkCreate{})
+		fmt.Printf("creating newtwork '%s'\n", networkName)
+		_, err := cli.NetworkCreate(ctx, networkName, types.NetworkCreate{})
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to create network %s with error %s", networkName, err)
 		}
 	}
-
 	return nil
 }

@@ -11,21 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+package config
 
-package docker
+var cassandraContainerName = "stargate-cassandra"
+var sgContainerName = "stargate"
 
-import (
-	"time"
-)
+func CassandraContainerName() string {
+	return cassandraContainerName
+}
 
-// Stop running docker image
-func (client *Client) Stop(container string) error {
-	t, err := time.ParseDuration("3s")
-	if err != nil {
-		return err
-	}
-
-	cli := client.cli
-	ctx := client.ctx
-	return cli.ContainerStop(ctx, container, &t)
+func StargateContainerName() string {
+	return sgContainerName
 }

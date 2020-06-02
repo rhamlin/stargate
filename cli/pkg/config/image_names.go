@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package docker
+package config 
 
-import (
-	"time"
-)
+import "fmt"
 
-// Stop running docker image
-func (client *Client) Stop(container string) error {
-	t, err := time.ParseDuration("3s")
-	if err != nil {
-		return err
-	}
+//sgVersion is overriden by build time properties
+var sgVersion = "v0.1.1"
+var sgImage = "datastax/stargate"
+var cassImage = "cassandra"
+var cassVersion = "3.11.6"
 
-	cli := client.cli
-	ctx := client.ctx
-	return cli.ContainerStop(ctx, container, &t)
+func CassandraImage() string {
+	return fmt.Sprintf("%s:%s", cassImage, cassVersion)
+}
+
+func StargateImage() string {
+	return fmt.Sprintf("%s:%s", sgImage, sgVersion)
 }

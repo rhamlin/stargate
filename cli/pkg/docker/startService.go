@@ -17,6 +17,7 @@ package docker
 import (
 	"fmt"
 
+	"github.com/datastax/stargate/cli/pkg/config"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -35,22 +36,20 @@ type StartServiceOptions struct {
 func (client *Client) StartService(opts *StartServiceOptions) error {
 	cli := client.cli
 	ctx := client.ctx
-
-	name := "stargate-service"
-
+	containerName := config.StargateContainerName()
 	err := client.EnsureNetwork()
 	if err != nil {
 		return err
 	}
 
-	client.Remove("service")
+	client.Remove(containerName)
 
 	image, err := client.EnsureImage(opts.DockerImageHost, opts.ImageName)
 	if err != nil {
 		return err
 	}
 
-	config := container.Config{
+	containerConfig := container.Config{
 		Image:        image,
 		ExposedPorts: nat.PortSet{},
 		Env: []string{
@@ -68,7 +67,7 @@ func (client *Client) StartService(opts *StartServiceOptions) error {
 		if err != nil {
 			return err
 		}
-		config.ExposedPorts[port] = empty
+		containerConfig.ExposedPorts[port] = empty
 		hostConfig.PortBindings[port] = []nat.PortBinding{
 			{HostPort: port.Port()},
 		}
@@ -76,11 +75,11 @@ func (client *Client) StartService(opts *StartServiceOptions) error {
 
 	networkConfig := network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
-			"stargate": {NetworkID: "stargate"},
+			"stargate": {NetworkID: config.StargateNetworkName()},
 		},
 	}
 
-	resp, err := cli.ContainerCreate(ctx, &config, &hostConfig, &networkConfig, name)
+	resp, err := cli.ContainerCreate(ctx, &containerConfig, &hostConfig, &networkConfig, containerName)
 	if err != nil {
 		return err
 	}
