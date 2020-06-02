@@ -35,6 +35,7 @@ func (suite *UploadSuite) SetupSuite() {
 	if err != nil {
 		log.Fatalf("unable to connect to docker %s", err)
 	}
+	time.Sleep(10 * time.Second)
 	err = client.StartCassandra(&docker.StartCassandraOptions{
 		DockerImageHost: "",
 		ImageName:       config.CassandraImage(),
