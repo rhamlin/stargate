@@ -32,11 +32,11 @@ object CassandraClientConfig {
 
   def parse(config: Config): CassandraClientConfig = {
     CassandraClientConfig(
-      config.getString("cassandra.contactPoints").split(",").map(_.split(":")).map(hp => (hp(0), Integer.parseInt(hp(1)))).toList,
-      config.getString("cassandra.dataCenter"),
-      config.getInt("cassandra.replication"),
-      config.getString("cassandra.username"),
-      config.getString("cassandra.password"),
-      config.getString("cassandra.authProvider"))
+      config.getString("contactPoints").split(",").map(_.split(":")).map(hp => (hp(0), Integer.parseInt(hp(1)))).toList,
+      config.getString("dataCenter"),
+      config.getInt("replication"),
+      config.getString("username"),
+      config.getString("password"),
+      config.getString("authProvider"))
   }
 }
