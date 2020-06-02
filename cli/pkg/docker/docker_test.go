@@ -110,7 +110,7 @@ func (suite *DockerSuite) TestEnsureImageWithImageService() {
 
 func (suite *DockerSuite) TestEnsureImageForLocalStargate() {
 	image, err := suite.client.EnsureImage("docker.io/library/", "service")
-	assert.Equal(suite.T(), "stargate:1.0", image)
+	assert.Equal(suite.T(), "stargate:"+currentLatestRelease, image)
 	assert.Nil(suite.T(), err)
 }
 

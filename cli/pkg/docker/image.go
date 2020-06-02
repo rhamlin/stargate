@@ -24,6 +24,8 @@ import (
 	"github.com/docker/docker/api/types/filters"
 )
 
+var currentLatestRelease = "0.1.1"
+
 // GetNameWithVersion finds a full versioned name for an image
 func (client *Client) GetNameWithVersion(image string) (string, error) {
 	ctx := client.ctx
@@ -47,8 +49,8 @@ func (client *Client) GetNameWithVersion(image string) (string, error) {
 
 // EnsureImage makes sure that the image we need is present and returns the correct name
 func (client *Client) EnsureImage(dockerHost, image string) (string, error) {
-    fullImage := dockerHost+image+":latest"
-    fmt.Println("Pulling image:", fullImage)
+	fullImage := dockerHost + image + ":" + currentLatestRelease
+	fmt.Println("Pulling image:", fullImage)
 	pullCmd := exec.Command("docker", "pull", fullImage)
 	_, err := pullCmd.CombinedOutput()
 	if err != nil {
