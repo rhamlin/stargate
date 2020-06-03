@@ -17,6 +17,7 @@ package cmd
 import (
 	"errors"
 
+	"github.com/datastax/stargate/cli/pkg/config"
 	"github.com/datastax/stargate/cli/pkg/docker"
 
 	"github.com/spf13/cobra"
@@ -34,6 +35,7 @@ Stopping or removing with the cassandra flag will also stop and remove the local
 }
 
 var withCassandra bool
+var serviceVersion string
 
 // StopServiceCmd stops a local instance
 var StopServiceCmd = &cobra.Command{
@@ -43,19 +45,20 @@ var StopServiceCmd = &cobra.Command{
 	Example: "stargate service stop",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
+		dockerConfig = config.NewSGDockerConfig(serviceVersion, cassandraVersion)
 		client, err := docker.NewClient()
 		if err != nil {
 			cmd.PrintErrln(err)
 			return
 		}
 		if withCassandra {
-			err = client.Stop("cassandra")
+			err = client.Stop(dockerConfig.CassandraContainerName())
 			if err != nil {
 				cmd.PrintErrln(err)
 				return
 			}
 		}
-		err = client.Stop("service")
+		err = client.Stop(dockerConfig.ServiceContainerName())
 		if err != nil {
 			cmd.PrintErrln(err)
 		} else {
@@ -72,19 +75,20 @@ var RemoveServiceCmd = &cobra.Command{
 	Example: "stargate service remove",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
+		dockerConfig = config.NewSGDockerConfig(serviceVersion, cassandraVersion)
 		client, err := docker.NewClient()
 		if err != nil {
 			cmd.PrintErrln(err)
 			return
 		}
 		if withCassandra {
-			err = client.Remove("cassandra")
+			err = client.Remove(dockerConfig.CassandraContainerName())
 			if err != nil {
 				cmd.PrintErrln(err)
 				return
 			}
 		}
-		err = client.Remove("service")
+		err = client.Remove(dockerConfig.ServiceContainerName())
 		if err != nil {
 			cmd.PrintErrln(err)
 		} else {
@@ -101,6 +105,7 @@ var StartServiceCmd = &cobra.Command{
 	Example: "stargate service start",
 	Args:    cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		dockerConfig = config.NewSGDockerConfig(serviceVersion, cassandraVersion)
 		client, err := docker.NewClient()
 		if err != nil {
 			cmd.PrintErrln(err)
@@ -114,11 +119,11 @@ var StartServiceCmd = &cobra.Command{
 		if len(args) == 1 {
 			cassandraURL = args[0]
 		}
-
 		if withCassandra {
 			err = client.StartCassandra(&docker.StartCassandraOptions{
-				DockerImageHost: "docker.io/library/",
-				ImageName:       "cassandra",
+				DockerImageHost:    "docker.io/library/",
+				ImageName:          dockerConfig.CassandraImage(),
+				ServiceNetworkName: dockerConfig.ServiceNetworkName(),
 			})
 			if err != nil {
 				cmd.PrintErrln(err)
@@ -130,7 +135,7 @@ var StartServiceCmd = &cobra.Command{
 			CassandraURL:    cassandraURL,
 			ExposedPorts:    []string{"8080"},
 			DockerImageHost: "docker.io/",
-			ImageName:       "datastax/stargate",
+			ImageName:       dockerConfig.ServiceImage(),
 		})
 		if err != nil {
 			cmd.PrintErrln(err)
@@ -147,5 +152,7 @@ func init() {
 	ServiceCmd.AddCommand(RemoveServiceCmd)
 	ServiceCmd.AddCommand(StartServiceCmd)
 
+	ServiceCmd.PersistentFlags().StringVarP(&serviceVersion, "stargate-version", "s", defaultStargateVersion, "the docker image tag to use for stargate")
+	ServiceCmd.PersistentFlags().StringVarP(&cassandraVersion, "cassandra-version", "t", defaultCassandraVersion, "the docker image tag to use for cassandra")
 	ServiceCmd.PersistentFlags().BoolVarP(&withCassandra, "with-cassandra", "c", false, "apply the stargate actions to a cassandra container as well")
 }

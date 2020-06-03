@@ -16,9 +16,9 @@ package docker
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
 
-	"github.com/datastax/stargate/cli/pkg/config"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/stretchr/testify/assert"
@@ -27,7 +27,12 @@ import (
 
 type DockerSuite struct {
 	suite.Suite
-	client Client
+	client                 Client
+	CassandraContainerName string
+	CassandraImage         string
+	ServiceContainerName   string
+	ServiceImage           string
+	ServiceNetworkName     string
 }
 
 func (suite *DockerSuite) SetupSuite() {
@@ -36,14 +41,19 @@ func (suite *DockerSuite) SetupSuite() {
 		panic(1)
 	}
 	suite.client = client
-
+	baseInstance := rand.Int()
+	suite.CassandraContainerName = fmt.Sprintf("cassandra%d", baseInstance)
+	suite.CassandraImage = "cassandra:3.11.6"
+	suite.ServiceContainerName = fmt.Sprintf("stargate%d", baseInstance)
+	suite.ServiceImage = "datastax/stargate:v0.1.1"
+	suite.ServiceNetworkName = fmt.Sprintf("stargate%d", baseInstance)
 	suite.TearDownTest()
 }
 
 func (suite *DockerSuite) TearDownTest() {
-	suite.client.Remove(config.CassandraContainerName())
-	suite.client.Remove(config.StargateContainerName())
-	suite.client.cli.NetworkRemove(suite.client.ctx, "stargate")
+	suite.client.Remove(suite.CassandraContainerName)
+	suite.client.Remove(suite.ServiceContainerName)
+	suite.client.cli.NetworkRemove(suite.client.ctx, suite.ServiceNetworkName)
 }
 
 const validHost = "http://localhost:8080"
@@ -52,33 +62,21 @@ const validPath = "../../../src/main/resources/schema.conf"
 //host of "" means docker.io
 var host = ""
 
-func (suite *DockerSuite) TestGetNameWithVersionBadInput() {
-	name, err := suite.client.GetNameWithVersion("not-an-image")
-	assert.NotNil(suite.T(), err)
-	assert.Empty(suite.T(), name)
-}
-
-func (suite *DockerSuite) TestGetNameWithVersion() {
-	name, err := suite.client.GetNameWithVersion(config.CassandraImage())
-	assert.Nil(suite.T(), err)
-	assert.Contains(suite.T(), name, "cassandra")
-}
-
 func (suite *DockerSuite) TestEnsureNetworkWithNoNetwork() {
-	suite.client.cli.NetworkRemove(suite.client.ctx, config.StargateImage())
-	err := suite.client.EnsureNetwork()
+	suite.client.cli.NetworkRemove(suite.client.ctx, suite.ServiceNetworkName)
+	err := suite.client.EnsureNetwork(suite.ServiceNetworkName)
 	assert.Nil(suite.T(), err)
 }
 
 func (suite *DockerSuite) TestEnsureNetworkWithNetwork() {
-	err := suite.client.EnsureNetwork()
+	err := suite.client.EnsureNetwork(suite.ServiceNetworkName)
 	assert.Nil(suite.T(), err)
-	err = suite.client.EnsureNetwork()
+	err = suite.client.EnsureNetwork(suite.ServiceNetworkName)
 	assert.Nil(suite.T(), err)
 }
 
 func (suite *DockerSuite) TestEnsureImageBadHost() {
-	image, err := suite.client.EnsureImage("example.com", config.CassandraImage())
+	image, err := suite.client.EnsureImage("example.com", suite.CassandraImage)
 	assert.Empty(suite.T(), image)
 	assert.NotNil(suite.T(), err)
 }
@@ -88,33 +86,33 @@ func (suite *DockerSuite) TestEnsureImageBadImage() {
 	assert.NotNil(suite.T(), err)
 }
 func (suite *DockerSuite) TestEnsureImageNoImage() {
-	suite.client.cli.ImageRemove(suite.client.ctx, config.CassandraImage(), types.ImageRemoveOptions{
+	suite.client.cli.ImageRemove(suite.client.ctx, suite.CassandraImage, types.ImageRemoveOptions{
 		Force: true,
 	})
-	image, err := suite.client.EnsureImage(host, config.CassandraImage())
+	image, err := suite.client.EnsureImage(host, suite.CassandraImage)
 	assert.Contains(suite.T(), image, "cassandra")
 	assert.Nil(suite.T(), err)
 }
 func (suite *DockerSuite) TestEnsureImageWithImage() {
-	image, err := suite.client.EnsureImage(host, config.CassandraImage())
+	image, err := suite.client.EnsureImage(host, suite.CassandraImage)
 	assert.Contains(suite.T(), image, "cassandra")
 	assert.Nil(suite.T(), err)
-	image, err = suite.client.EnsureImage(host, config.CassandraImage())
+	image, err = suite.client.EnsureImage(host, suite.CassandraImage)
 	assert.Contains(suite.T(), image, "cassandra")
 	assert.Nil(suite.T(), err)
 }
 
 func (suite *DockerSuite) TestEnsureImageWithImageService() {
-	image, err := suite.client.EnsureImage(host, config.StargateImage())
+	image, err := suite.client.EnsureImage(host, suite.ServiceImage)
 	assert.Contains(suite.T(), image, "stargate")
 	assert.Nil(suite.T(), err)
-	image, err = suite.client.EnsureImage(host, config.StargateImage())
+	image, err = suite.client.EnsureImage(host, suite.ServiceImage)
 	assert.Contains(suite.T(), image, "stargate")
 	assert.Nil(suite.T(), err)
 }
 
 func (suite *DockerSuite) TestEnsureImageForLocalStargate() {
-	image, err := suite.client.EnsureImage(host, config.StargateImage())
+	image, err := suite.client.EnsureImage(host, suite.ServiceImage)
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), "datastax/stargate:v0.1.1", image)
 }
@@ -126,8 +124,10 @@ func (suite *DockerSuite) TestStartCassandraNoInput() {
 
 func (suite *DockerSuite) TestStartCassandra() {
 	err := suite.client.StartCassandra(&StartCassandraOptions{
-		DockerImageHost: host,
-		ImageName:       config.CassandraImage(),
+		DockerImageHost:    host,
+		ImageName:          suite.CassandraImage,
+		ContainerName:      suite.CassandraContainerName,
+		ServiceNetworkName: suite.ServiceContainerName,
 	})
 	assert.Nil(suite.T(), err)
 }
@@ -138,25 +138,29 @@ func (suite *DockerSuite) TestStartServiceNoInput() {
 
 func (suite *DockerSuite) TestStartService() {
 	err := suite.client.StartService(&StartServiceOptions{
-		ExposedPorts:    []string{"8080"},
-		DockerImageHost: host,
-		ImageName:       config.StargateImage(),
+		ExposedPorts:         []string{"8080"},
+		DockerImageHost:      host,
+		ImageName:            suite.ServiceImage,
+		ServiceContainerName: suite.ServiceContainerName,
+		ServiceNetworkName:   suite.ServiceNetworkName,
 	})
 	assert.Nil(suite.T(), err)
 }
 func (suite *DockerSuite) TestStop() {
 	err := suite.client.StartService(&StartServiceOptions{
-		ExposedPorts:    []string{"8080"},
-		DockerImageHost: host,
-		ImageName:       config.StargateImage(),
+		ExposedPorts:         []string{"8080"},
+		DockerImageHost:      host,
+		ImageName:            suite.ServiceImage,
+		ServiceContainerName: suite.ServiceContainerName,
+		ServiceNetworkName:   suite.ServiceNetworkName,
 	})
 	assert.Nil(suite.T(), err)
 
-	err = suite.client.Stop(config.StargateContainerName())
+	err = suite.client.Stop(suite.ServiceContainerName)
 	assert.Nil(suite.T(), err)
 
 	args := filters.NewArgs()
-	args.Add("name", config.StargateContainerName())
+	args.Add("name", suite.ServiceContainerName)
 	containers, err := suite.client.cli.ContainerList(suite.client.ctx, types.ContainerListOptions{
 		All:     true,
 		Filters: args,
@@ -166,7 +170,7 @@ func (suite *DockerSuite) TestStop() {
 
 	stargateContainerState := ""
 	//api quirk
-	expectedContainerName := fmt.Sprintf("/%s", config.StargateContainerName())
+	expectedContainerName := fmt.Sprintf("/%s", suite.ServiceContainerName)
 	for _, c := range containers {
 		for _, containerName := range c.Names {
 			fmt.Println(containerName)

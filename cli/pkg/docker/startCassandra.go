@@ -17,7 +17,6 @@ package docker
 import (
 	"fmt"
 
-	"github.com/datastax/stargate/cli/pkg/config"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -26,18 +25,20 @@ import (
 
 // StartCassandraOptions defines the input of Client.Start
 type StartCassandraOptions struct {
-	DockerImageHost string
-	ImageName       string
-	ExposedPorts    []string
+	ContainerName      string
+	DockerImageHost    string
+	ImageName          string
+	ServiceNetworkName string
+	ExposedPorts       []string
 }
 
 // StartCassandra running docker image
 func (client *Client) StartCassandra(opts *StartCassandraOptions) error {
 	cli := client.cli
 	ctx := client.ctx
-	containerName := config.CassandraContainerName()
+	containerName := opts.ContainerName
 
-	err := client.EnsureNetwork()
+	err := client.EnsureNetwork(opts.ServiceNetworkName)
 	if err != nil {
 		return err
 	}
@@ -74,19 +75,19 @@ func (client *Client) StartCassandra(opts *StartCassandraOptions) error {
 
 	networkConfig := network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
-			"stargate": {NetworkID: config.StargateNetworkName()},
+			"stargate": {NetworkID: opts.ServiceNetworkName},
 		},
 	}
 
 	resp, err := cli.ContainerCreate(ctx, &containerConfig, &hostConfig, &networkConfig, containerName)
 	if err != nil {
-		return fmt.Errorf("unable to create container name %s from image %s because of error from docker %s", containerName, opts.ImageName, err)
+		return fmt.Errorf("unable to create container name '%s' from image '%s' because of error from docker '%s'", containerName, opts.ImageName, err)
 	}
 
 	fmt.Println("Starting Cassandra. This might take a minute...")
 	err = cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{})
 	if err != nil {
-		return fmt.Errorf("unable to start container %s from image %s because of error from docker %s", containerName, opts.ImageName, err)
+		return fmt.Errorf("unable to start container '%s' from image '%s' because of error from docker '%s'", containerName, opts.ImageName, err)
 	}
 
 	return client.Started(resp.ID, "Starting listening for CQL clients")

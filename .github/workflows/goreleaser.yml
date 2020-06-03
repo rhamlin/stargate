@@ -24,6 +24,9 @@ jobs:
       -
         name: Unshallow
         run: git fetch --prune --unshallow
+      - 
+        name: set version
+        run: echo "::set-env name=SG_VERSION::$(mvn org.apache.maven.plugins:maven-help-plugin:2.1.1:evaluate -Dexpression=project.version |grep -Ev '(^\[|Download\w+:)')"
       -
         name: Set up Go
         uses: actions/setup-go@v2

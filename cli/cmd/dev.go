@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"github.com/datastax/stargate/cli/pkg/config"
 	"github.com/datastax/stargate/cli/pkg/docker"
 
 	"github.com/spf13/cobra"
@@ -39,19 +40,20 @@ var stopDevCmd = &cobra.Command{
 	Example: "stargate dev stop",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
+		dockerConfig = config.NewSGDockerConfig(serviceVersion, cassandraVersion)
 		client, err := docker.NewClient()
 		if err != nil {
 			cmd.PrintErrln(err)
 			return
 		}
 		if withCassandra {
-			err = client.Stop("cassandra")
+			err = client.Stop(dockerConfig.CassandraContainerName())
 			if err != nil {
 				cmd.PrintErrln(err)
 				return
 			}
 		}
-		err = client.Stop("service")
+		err = client.Stop(dockerConfig.ServiceContainerName())
 		if err != nil {
 			cmd.PrintErrln(err)
 		} else {
@@ -67,19 +69,20 @@ var removeDevCmd = &cobra.Command{
 	Example: "stargate dev remove",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
+		dockerConfig = config.NewSGDockerConfig(serviceVersion, cassandraVersion)
 		client, err := docker.NewClient()
 		if err != nil {
 			cmd.PrintErrln(err)
 			return
 		}
 		if withCassandra {
-			err = client.Remove("cassandra")
+			err = client.Remove(dockerConfig.CassandraContainerName())
 			if err != nil {
 				cmd.PrintErrln(err)
 				return
 			}
 		}
-		err = client.Remove("service")
+		err = client.Remove(dockerConfig.ServiceContainerName())
 		if err != nil {
 			cmd.PrintErrln(err)
 		} else {
@@ -96,6 +99,7 @@ var startDevCmd = &cobra.Command{
 	Args:    cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		client, err := docker.NewClient()
+		dockerConfig = config.NewSGDockerConfig(serviceVersion, cassandraVersion)
 		if err != nil {
 			cmd.PrintErrln(err)
 			return
@@ -103,7 +107,7 @@ var startDevCmd = &cobra.Command{
 
 		err = client.StartCassandra(&docker.StartCassandraOptions{
 			DockerImageHost: "docker.io/library/",
-			ImageName:       "cassandra",
+			ImageName:       dockerConfig.CassandraImage(),
 		})
 		if err != nil {
 			cmd.PrintErrln(err)
@@ -114,7 +118,7 @@ var startDevCmd = &cobra.Command{
 			CassandraURL:    "stargate-cassandra",
 			ExposedPorts:    []string{"8080"},
 			DockerImageHost: "docker.io/",
-			ImageName:       "datastax/stargate",
+			ImageName:       dockerConfig.ServiceImage(),
 		})
 
 		if err != nil {

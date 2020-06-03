@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/datastax/stargate/cli/pkg/config"
 	"github.com/spf13/cobra"
 
 	homedir "github.com/mitchellh/go-homedir"
@@ -25,6 +26,9 @@ import (
 )
 
 var cfgFile string
+var defaultCassandraVersion string
+var defaultStargateVersion string
+var dockerConfig *config.SGDockerConfig
 
 var rootCmd = &cobra.Command{
 	Use:   "stargate",
@@ -34,7 +38,9 @@ var rootCmd = &cobra.Command{
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute() {
+func Execute(newDefaultStargateVersion, newDefaultCassandraVersion string) {
+	defaultCassandraVersion = newDefaultCassandraVersion
+	defaultStargateVersion = newDefaultStargateVersion
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

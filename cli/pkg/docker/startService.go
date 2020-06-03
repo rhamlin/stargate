@@ -17,7 +17,6 @@ package docker
 import (
 	"fmt"
 
-	"github.com/datastax/stargate/cli/pkg/config"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -26,18 +25,20 @@ import (
 
 // StartServiceOptions defines the input of Client.Start
 type StartServiceOptions struct {
-	CassandraURL    string
-	ExposedPorts    []string
-	DockerImageHost string
-	ImageName       string
+	CassandraURL          string
+	ExposedPorts          []string
+	DockerImageHost       string
+	ImageName             string
+	ServiceContainerName string
+	ServiceNetworkName   string
 }
 
 // StartService running docker image
 func (client *Client) StartService(opts *StartServiceOptions) error {
 	cli := client.cli
 	ctx := client.ctx
-	containerName := config.StargateContainerName()
-	err := client.EnsureNetwork()
+	containerName := opts.ServiceContainerName
+	err := client.EnsureNetwork(opts.ServiceNetworkName)
 	if err != nil {
 		return err
 	}
@@ -75,7 +76,7 @@ func (client *Client) StartService(opts *StartServiceOptions) error {
 
 	networkConfig := network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
-			"stargate": {NetworkID: config.StargateNetworkName()},
+			"stargate": {NetworkID: opts.ServiceNetworkName},
 		},
 	}
 

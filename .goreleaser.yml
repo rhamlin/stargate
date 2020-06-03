@@ -6,7 +6,7 @@ before:
     - go mod download
     # you may remove this if you don't need go generate
     - go generate ./...
-builds:      
+builds:
 - env:
   - CGO_ENABLED=0
   goos:
@@ -16,6 +16,8 @@ builds:
   goarch:
     - 386
     - amd64
+  ldflags: 
+    -s -w -X main.defaultSGVersion={{.Env.SG_VERSION}}
 archives:
 - replacements:
     darwin: Darwin

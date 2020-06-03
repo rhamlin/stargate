@@ -15,7 +15,9 @@
 package upload
 
 import (
+	"fmt"
 	"log"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -27,7 +29,11 @@ import (
 
 type UploadSuite struct {
 	suite.Suite
-	client docker.Client
+	client                 docker.Client
+	dockerConfig           config.SGDockerConfig
+	ServiceContainerName   string
+	ServiceNetworkName     string
+	CassandraContainerName string
 }
 
 func (suite *UploadSuite) SetupSuite() {
@@ -35,31 +41,39 @@ func (suite *UploadSuite) SetupSuite() {
 	if err != nil {
 		log.Fatalf("unable to connect to docker %s", err)
 	}
-	time.Sleep(30 * time.Second)
+	dockerConfig := config.NewSGDockerConfig("v0.1.1", "3.11.6")
+	testRun := rand.Int()
+	suite.CassandraContainerName = fmt.Sprintf("%s%d", dockerConfig.CassandraContainerName(), testRun)
+	suite.ServiceContainerName = fmt.Sprintf("%s%d", dockerConfig.ServiceContainerName(), testRun)
+	suite.ServiceNetworkName = fmt.Sprintf("%s%d", dockerConfig.ServiceNetworkName(), testRun)
 	err = client.StartCassandra(&docker.StartCassandraOptions{
-		DockerImageHost: "",
-		ImageName:       config.CassandraImage(),
+		ContainerName:      suite.CassandraContainerName,
+		DockerImageHost:    "",
+		ImageName:          dockerConfig.CassandraImage(),
+		ServiceNetworkName: suite.ServiceNetworkName,
 	})
+
 	if err != nil {
 		log.Fatalf("unable to start cassandra %s", err)
 	}
-	time.Sleep(60 * time.Second)
+	time.Sleep(50 * time.Second)
 	err = client.StartService(&docker.StartServiceOptions{
-		CassandraURL:    "stargate-cassandra",
-		ExposedPorts:    []string{"8080"},
-		DockerImageHost: "",
-		ImageName:       config.StargateImage(),
+		CassandraURL:         "stargate-cassandra",
+		ExposedPorts:         []string{"8080"},
+		DockerImageHost:      "",
+		ImageName:            dockerConfig.ServiceImage(),
+		ServiceContainerName: suite.ServiceContainerName,
+		ServiceNetworkName:   suite.ServiceNetworkName,
 	})
 	if err != nil {
 		log.Fatalf("unable to start service %s", err)
 	}
-	time.Sleep(60 * time.Second)
 	suite.client = client
 }
 
 func (suite *UploadSuite) TearDownSuite() {
-	suite.client.Remove(config.StargateContainerName())
-	suite.client.Remove(config.CassandraContainerName())
+	suite.client.Remove(suite.ServiceContainerName)
+	suite.client.Remove(suite.CassandraContainerName)
 }
 
 const validHost = "http://localhost:8080/v1/api/test/schema"
