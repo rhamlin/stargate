@@ -41,7 +41,10 @@ func (suite *UploadSuite) SetupSuite() {
 	if err != nil {
 		log.Fatalf("unable to connect to docker %s", err)
 	}
-	dockerConfig := config.NewSGDockerConfig("v0.1.1", "3.11.6")
+	dockerConfig, err := config.NewSGDockerConfig("v0.1.1", "3.11.6")
+	if err != nil {
+		log.Fatalf("unable to wire up configuration with '%s'", err)
+	}
 	rand.Seed(time.Now().UnixNano())
 	testRun := rand.Int()
 	suite.CassandraContainerName = fmt.Sprintf("%s%d", dockerConfig.CassandraContainerName(), testRun)
