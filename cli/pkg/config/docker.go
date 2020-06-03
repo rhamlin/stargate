@@ -27,7 +27,13 @@ type SGDockerConfig struct {
 }
 
 //NewSGDockerConfig starts a new instance with default values initialized
-func NewSGDockerConfig(serviceVersion, cassandraVersion string) *SGDockerConfig {
+func NewSGDockerConfig(serviceVersion, cassandraVersion string) (*SGDockerConfig, error) {
+	if serviceVersion == "" {
+		return &SGDockerConfig{}, fmt.Errorf("service version was empty this is invalid")
+	}
+	if cassandraVersion == "" {
+		return &SGDockerConfig{}, fmt.Errorf("cassandra version was empty this is invalid")
+	}
 	return &SGDockerConfig{
 		serviceContainerName:   "stargate",
 		serviceImage:           "datastax/stargate",
@@ -36,7 +42,7 @@ func NewSGDockerConfig(serviceVersion, cassandraVersion string) *SGDockerConfig 
 		cassandraContainerName: "stargate-cassandra",
 		cassandraImage:         "cassandra",
 		cassandraVersion:       cassandraVersion,
-	}
+	}, nil
 }
 
 //ServiceNetworkName provides a bridge network for cassandra and stargate to communicate

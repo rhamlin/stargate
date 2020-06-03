@@ -26,8 +26,12 @@ import (
 )
 
 var cfgFile string
+var cassandraVersion string
+var serviceVersion string
+
 var defaultCassandraVersion string
-var defaultStargateVersion string
+var defaultServiceVersion string
+
 var dockerConfig *config.SGDockerConfig
 
 var rootCmd = &cobra.Command{
@@ -38,9 +42,11 @@ var rootCmd = &cobra.Command{
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute(newDefaultStargateVersion, newDefaultCassandraVersion string) {
+func Execute(newDefaultServiceVersion, newDefaultCassandraVersion string) {
 	defaultCassandraVersion = newDefaultCassandraVersion
-	defaultStargateVersion = newDefaultStargateVersion
+	defaultServiceVersion = newDefaultServiceVersion
+	cassandraVersion = newDefaultCassandraVersion
+	serviceVersion = newDefaultServiceVersion
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

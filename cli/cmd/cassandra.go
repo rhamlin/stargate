@@ -36,7 +36,11 @@ var stopCassandraCmd = &cobra.Command{
 	Example: "stargate cassandra stop",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		dockerConfig = config.NewSGDockerConfig(serviceVersion, cassandraVersion)
+		dockerConfig, err := config.NewSGDockerConfig(serviceVersion, cassandraVersion)
+		if err != nil {
+			cmd.PrintErrln(err)
+			return
+		}
 		client, err := docker.NewClient()
 		if err != nil {
 			cmd.PrintErrln(err)
@@ -57,7 +61,11 @@ var removeCassandraCmd = &cobra.Command{
 	Example: "stargate service remove",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		dockerConfig = config.NewSGDockerConfig(serviceVersion, cassandraVersion)
+		dockerConfig, err := config.NewSGDockerConfig(serviceVersion, cassandraVersion)
+		if err != nil {
+			cmd.PrintErrln(err)
+			return
+		}
 		client, err := docker.NewClient()
 		if err != nil {
 			cmd.PrintErrln(err)
@@ -72,7 +80,6 @@ var removeCassandraCmd = &cobra.Command{
 }
 
 var ports []string
-var cassandraVersion string
 
 var startCassandraCmd = &cobra.Command{
 	Short:   "Start a local, dockerized cassandra instance",
@@ -81,15 +88,23 @@ var startCassandraCmd = &cobra.Command{
 	Example: "stargate cassandra start",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		dockerConfig = config.NewSGDockerConfig(serviceVersion, cassandraVersion)
+		dockerConfig, err := config.NewSGDockerConfig(serviceVersion, cassandraVersion)
+		if err != nil {
+			cmd.PrintErrln(err)
+			return
+		}
 		client, err := docker.NewClient()
 		if err != nil {
 			cmd.PrintErrln(err)
+			return
 		}
 		err = client.StartCassandra(&docker.StartCassandraOptions{
-			DockerImageHost: "docker.io/library/",
-			ImageName:       dockerConfig.CassandraImage(),
-			ExposedPorts:    ports,
+			//"" means docker.io
+			DockerImageHost:    "",
+			ImageName:          dockerConfig.CassandraImage(),
+			ExposedPorts:       ports,
+			ServiceNetworkName: dockerConfig.ServiceNetworkName(),
+			ContainerName:      dockerConfig.CassandraContainerName(),
 		})
 		if err != nil {
 			cmd.PrintErrln(err)
