@@ -51,10 +51,12 @@ package object http {
   }
 
   def validateJsonContentHeader(req: HttpServletRequest) : Unit = {
-    val contentType = req.getContentType
-    if (contentType != jsonType){
-      throw InvalidContentTypeException(jsonType, contentType)
-    }
+    // TODO: temporarily removing this check because it doesnt account for formats like application/json;charset=UTF-8
+    //       need to find a library to handle this properly
+    //val contentType = req.getContentType
+    //if (contentType != jsonType){
+    //  throw InvalidContentTypeException(jsonType, contentType)
+    //}
   }
 
   /**
