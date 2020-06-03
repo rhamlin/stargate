@@ -42,6 +42,7 @@ func (suite *UploadSuite) SetupSuite() {
 		log.Fatalf("unable to connect to docker %s", err)
 	}
 	dockerConfig := config.NewSGDockerConfig("v0.1.1", "3.11.6")
+	rand.Seed(time.Now().UnixNano())
 	testRun := rand.Int()
 	suite.CassandraContainerName = fmt.Sprintf("%s%d", dockerConfig.CassandraContainerName(), testRun)
 	suite.ServiceContainerName = fmt.Sprintf("%s%d", dockerConfig.ServiceContainerName(), testRun)
@@ -58,7 +59,7 @@ func (suite *UploadSuite) SetupSuite() {
 	}
 	time.Sleep(50 * time.Second)
 	err = client.StartService(&docker.StartServiceOptions{
-		CassandraURL:         "stargate-cassandra",
+		CassandraURL:         suite.CassandraContainerName,
 		ExposedPorts:         []string{"8080"},
 		DockerImageHost:      "",
 		ImageName:            dockerConfig.ServiceImage(),
@@ -72,8 +73,9 @@ func (suite *UploadSuite) SetupSuite() {
 }
 
 func (suite *UploadSuite) TearDownSuite() {
-	suite.client.Remove(suite.ServiceContainerName)
+	//suite.client.Remove(suite.ServiceContainerName)
 	suite.client.Remove(suite.CassandraContainerName)
+	suite.client.RemoveNetwork(suite.ServiceNetworkName)
 }
 
 const validHost = "http://localhost:8080/v1/api/test/schema"

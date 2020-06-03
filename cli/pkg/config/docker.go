@@ -20,7 +20,6 @@ type SGDockerConfig struct {
 	cassandraImage         string
 	cassandraVersion       string
 	cassandraContainerName string
-	cassandraNetwork       string
 	serviceContainerName   string
 	serviceImage           string
 	serviceNetwork         string
@@ -37,23 +36,12 @@ func NewSGDockerConfig(serviceVersion, cassandraVersion string) *SGDockerConfig 
 		cassandraContainerName: "stargate-cassandra",
 		cassandraImage:         "cassandra",
 		cassandraVersion:       cassandraVersion,
-		cassandraNetwork:       "stargate-cassandra",
 	}
 }
 
 //ServiceNetworkName provides a bridge network for cassandra and stargate to communicate
 func (sg *SGDockerConfig) ServiceNetworkName() string {
 	return sg.serviceNetwork
-}
-
-//CassandraNetworkName provides a bridge network for cassandra and stargate to communicate
-func (sg *SGDockerConfig) CassandraNetworkName() string {
-	return sg.cassandraNetwork
-}
-
-//CassandraNetwork provides the id for cassandra for the bridge network to communicate with
-func (sg *SGDockerConfig) CassandraNetwork() string {
-	return sg.cassandraNetwork
 }
 
 //CassandraImage is the full image and version of the Apache Cassandra docker image

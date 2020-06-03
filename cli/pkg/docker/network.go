@@ -55,3 +55,22 @@ func (client *Client) EnsureNetwork(networkName string) error {
 	}
 	return nil
 }
+
+// RemoveNetwork checks to see if the stargate bridge network exists and removes it if it does
+func (client *Client) RemoveNetwork(networkName string) error {
+	cli := client.cli
+	ctx := client.ctx
+	networkFound, err := client.networkExists(networkName)
+	if err != nil {
+		return err
+	}
+
+	if networkFound {
+		fmt.Printf("removeing network '%s'\n", networkName)
+		err := cli.NetworkRemove(ctx, networkName)
+		if err != nil {
+			return fmt.Errorf("unable to remove network '%s' with error '%s'", networkName, err)
+		}
+	}
+	return nil
+}

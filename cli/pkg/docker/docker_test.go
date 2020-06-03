@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
@@ -41,6 +42,7 @@ func (suite *DockerSuite) SetupSuite() {
 		panic(1)
 	}
 	suite.client = client
+	rand.Seed(time.Now().UnixNano())
 	baseInstance := rand.Int()
 	suite.CassandraContainerName = fmt.Sprintf("cassandra%d", baseInstance)
 	suite.CassandraImage = "cassandra:3.11.6"
