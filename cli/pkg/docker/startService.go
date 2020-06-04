@@ -25,32 +25,32 @@ import (
 
 // StartServiceOptions defines the input of Client.Start
 type StartServiceOptions struct {
-	CassandraURL    string
-	ExposedPorts    []string
-	DockerImageHost string
-	ImageName       string
+	CassandraURL          string
+	ExposedPorts          []string
+	DockerImageHost       string
+	ImageName             string
+	ServiceContainerName string
+	ServiceNetworkName   string
 }
 
 // StartService running docker image
 func (client *Client) StartService(opts *StartServiceOptions) error {
 	cli := client.cli
 	ctx := client.ctx
-
-	name := "stargate-service"
-
-	err := client.EnsureNetwork()
+	containerName := opts.ServiceContainerName
+	err := client.EnsureNetwork(opts.ServiceNetworkName)
 	if err != nil {
 		return err
 	}
 
-	client.Remove("service")
+	client.Remove(containerName)
 
 	image, err := client.EnsureImage(opts.DockerImageHost, opts.ImageName)
 	if err != nil {
 		return err
 	}
 
-	config := container.Config{
+	containerConfig := container.Config{
 		Image:        image,
 		ExposedPorts: nat.PortSet{},
 		Env: []string{
@@ -68,7 +68,7 @@ func (client *Client) StartService(opts *StartServiceOptions) error {
 		if err != nil {
 			return err
 		}
-		config.ExposedPorts[port] = empty
+		containerConfig.ExposedPorts[port] = empty
 		hostConfig.PortBindings[port] = []nat.PortBinding{
 			{HostPort: port.Port()},
 		}
@@ -76,11 +76,11 @@ func (client *Client) StartService(opts *StartServiceOptions) error {
 
 	networkConfig := network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
-			"stargate": {NetworkID: "stargate"},
+			"stargate": {NetworkID: opts.ServiceNetworkName},
 		},
 	}
 
-	resp, err := cli.ContainerCreate(ctx, &config, &hostConfig, &networkConfig, name)
+	resp, err := cli.ContainerCreate(ctx, &containerConfig, &hostConfig, &networkConfig, containerName)
 	if err != nil {
 		return err
 	}

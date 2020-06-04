@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"github.com/datastax/stargate/cli/pkg/config"
 	"github.com/datastax/stargate/cli/pkg/docker"
 
 	"github.com/spf13/cobra"
@@ -35,11 +36,16 @@ var stopCassandraCmd = &cobra.Command{
 	Example: "stargate cassandra stop",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
+		dockerConfig, err := config.NewSGDockerConfig(serviceVersion, cassandraVersion)
+		if err != nil {
+			cmd.PrintErrln(err)
+			return
+		}
 		client, err := docker.NewClient()
 		if err != nil {
 			cmd.PrintErrln(err)
 		}
-		err = client.Stop("cassandra")
+		err = client.Stop(dockerConfig.CassandraContainerName())
 		if err != nil {
 			cmd.PrintErrln(err)
 		} else {
@@ -55,11 +61,16 @@ var removeCassandraCmd = &cobra.Command{
 	Example: "stargate service remove",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
+		dockerConfig, err := config.NewSGDockerConfig(serviceVersion, cassandraVersion)
+		if err != nil {
+			cmd.PrintErrln(err)
+			return
+		}
 		client, err := docker.NewClient()
 		if err != nil {
 			cmd.PrintErrln(err)
 		}
-		err = client.Remove("cassandra")
+		err = client.Remove(dockerConfig.CassandraContainerName())
 		if err != nil {
 			cmd.PrintErrln(err)
 		} else {
@@ -77,14 +88,23 @@ var startCassandraCmd = &cobra.Command{
 	Example: "stargate cassandra start",
 	Args:    cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
+		dockerConfig, err := config.NewSGDockerConfig(serviceVersion, cassandraVersion)
+		if err != nil {
+			cmd.PrintErrln(err)
+			return
+		}
 		client, err := docker.NewClient()
 		if err != nil {
 			cmd.PrintErrln(err)
+			return
 		}
 		err = client.StartCassandra(&docker.StartCassandraOptions{
-			DockerImageHost: "docker.io/library/",
-			ImageName:       "cassandra",
-			ExposedPorts:    ports,
+			//"" means docker.io
+			DockerImageHost:    "",
+			ImageName:          dockerConfig.CassandraImage(),
+			ExposedPorts:       ports,
+			ServiceNetworkName: dockerConfig.ServiceNetworkName(),
+			ContainerName:      dockerConfig.CassandraContainerName(),
 		})
 		if err != nil {
 			cmd.PrintErrln(err)
@@ -101,5 +121,6 @@ func init() {
 	cassandraCmd.AddCommand(removeCassandraCmd)
 	cassandraCmd.AddCommand(startCassandraCmd)
 
+	startCassandraCmd.PersistentFlags().StringVarP(&cassandraVersion, "cassandra-version", "t", defaultCassandraVersion, "the docker image tag to use for cassandra")
 	startCassandraCmd.PersistentFlags().StringSliceVarP(&ports, "ports", "p", []string{"9042"}, "expose cassandra ports on localhost")
 }

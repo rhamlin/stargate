@@ -15,45 +15,24 @@
 package docker
 
 import (
-	"errors"
 	"fmt"
 	"os/exec"
-	"strings"
-
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/filters"
 )
 
-// GetNameWithVersion finds a full versioned name for an image
-func (client *Client) GetNameWithVersion(image string) (string, error) {
-	ctx := client.ctx
-	cli := client.cli
-
-	args := filters.NewArgs()
-	args.Add("reference", image)
-	summary, err := cli.ImageList(ctx, types.ImageListOptions{
-		Filters: args,
-	})
-	if err != nil {
-		return "", err
-	}
-	for _, r := range summary {
-		if len(r.RepoTags) > 0 && strings.Index(r.RepoTags[0], image+":") == 0 {
-			return r.RepoTags[0], nil
-		}
-	}
-	return "", errors.New("Could not find a matching image")
-}
-
 // EnsureImage makes sure that the image we need is present and returns the correct name
-func (client *Client) EnsureImage(dockerHost, image string) (string, error) {
-    fullImage := dockerHost+image+":latest"
-    fmt.Println("Pulling image:", fullImage)
+func (client *Client) EnsureImage(dockerHost, imageName string) (string, error) {
+	var fullImage = ""
+	//dockerHost = "" signifies docker.io
+	if dockerHost == "" {
+		fullImage = imageName
+	} else {
+		fullImage = fmt.Sprintf("%s/%s", dockerHost, imageName)
+	}
+	fmt.Println("Pulling image:", fullImage)
 	pullCmd := exec.Command("docker", "pull", fullImage)
 	_, err := pullCmd.CombinedOutput()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("unable to pull '%s' due to '%s' from the docker command", fullImage, err.Error())
 	}
-
-	return client.GetNameWithVersion(image)
+	return imageName, nil
 }

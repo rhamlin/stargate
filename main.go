@@ -14,8 +14,14 @@
 
 package main
 
-import "github.com/datastax/stargate/cli/cmd"
+import (
+	"github.com/datastax/stargate/cli/cmd"
+)
+
+//defaultSGVersion is overriden at build time by the pom.xml version during a tag push
+var defaultSGVersion = "v0.1.1"
+var defaultCassandraVersion = "3.11.6"
 
 func main() {
-	cmd.Execute()
+	cmd.Execute(defaultSGVersion, defaultCassandraVersion)
 }

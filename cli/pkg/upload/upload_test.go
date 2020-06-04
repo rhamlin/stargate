@@ -15,9 +15,13 @@
 package upload
 
 import (
+	"fmt"
+	"log"
+	"math/rand"
 	"testing"
 	"time"
 
+	"github.com/datastax/stargate/cli/pkg/config"
 	"github.com/datastax/stargate/cli/pkg/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -25,40 +29,59 @@ import (
 
 type UploadSuite struct {
 	suite.Suite
-	client docker.Client
+	client                 docker.Client
+	dockerConfig           config.SGDockerConfig
+	ServiceContainerName   string
+	ServiceNetworkName     string
+	CassandraContainerName string
 }
 
 func (suite *UploadSuite) SetupSuite() {
 	client, err := docker.NewClient()
 	if err != nil {
-		panic(1)
+		log.Fatalf("unable to connect to docker %s", err)
 	}
+	dockerConfig, err := config.NewSGDockerConfig("v0.1.1", "3.11.6")
+	if err != nil {
+		log.Fatalf("unable to wire up configuration with '%s'", err)
+	}
+	rand.Seed(time.Now().UnixNano())
+	testRun := rand.Int()
+	suite.CassandraContainerName = fmt.Sprintf("%s%d", dockerConfig.CassandraContainerName(), testRun)
+	suite.ServiceContainerName = fmt.Sprintf("%s%d", dockerConfig.ServiceContainerName(), testRun)
+	suite.ServiceNetworkName = fmt.Sprintf("%s%d", dockerConfig.ServiceNetworkName(), testRun)
 	err = client.StartCassandra(&docker.StartCassandraOptions{
-		DockerImageHost: "docker.io/library/",
-		ImageName:       "cassandra",
+		ContainerName:      suite.CassandraContainerName,
+		DockerImageHost:    "",
+		ImageName:          dockerConfig.CassandraImage(),
+		ServiceNetworkName: suite.ServiceNetworkName,
 	})
+
 	if err != nil {
-		panic(1)
+		log.Fatalf("unable to start cassandra %s", err)
 	}
+	time.Sleep(50 * time.Second)
 	err = client.StartService(&docker.StartServiceOptions{
-		CassandraURL:    "stargate-cassandra",
-		ExposedPorts:    []string{"8080"},
-		DockerImageHost: "docker.io/",
-		ImageName:       "service",
+		CassandraURL:         suite.CassandraContainerName,
+		ExposedPorts:         []string{"8080"},
+		DockerImageHost:      "",
+		ImageName:            dockerConfig.ServiceImage(),
+		ServiceContainerName: suite.ServiceContainerName,
+		ServiceNetworkName:   suite.ServiceNetworkName,
 	})
 	if err != nil {
-		panic(1)
+		log.Fatalf("unable to start service %s", err)
 	}
 	suite.client = client
-	time.Sleep(20 * time.Second)
 }
 
 func (suite *UploadSuite) TearDownSuite() {
-	suite.client.Remove("service")
-	suite.client.Remove("cassandra")
+	//suite.client.Remove(suite.ServiceContainerName)
+	suite.client.Remove(suite.CassandraContainerName)
+	suite.client.RemoveNetwork(suite.ServiceNetworkName)
 }
 
-const validHost = "http://localhost:8080/test"
+const validHost = "http://localhost:8080/v1/api/test/schema"
 const validPath = "../../../src/main/resources/schema.conf"
 
 func (suite *UploadSuite) TestInvalidPathInput() {

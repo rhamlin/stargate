@@ -25,29 +25,34 @@ import (
 
 // StartCassandraOptions defines the input of Client.Start
 type StartCassandraOptions struct {
-	DockerImageHost string
-	ImageName       string
-	ExposedPorts    []string
+	ContainerName      string
+	DockerImageHost    string
+	ImageName          string
+	ServiceNetworkName string
+	ExposedPorts       []string
 }
 
 // StartCassandra running docker image
 func (client *Client) StartCassandra(opts *StartCassandraOptions) error {
 	cli := client.cli
 	ctx := client.ctx
+	containerName := opts.ContainerName
 
-	err := client.EnsureNetwork()
+	err := client.EnsureNetwork(opts.ServiceNetworkName)
 	if err != nil {
 		return err
 	}
-
-	client.Remove("cassandra")
+	//TODO check for status of existing containers
+	if err := client.Remove(containerName); err != nil {
+		fmt.Printf("removing container %s\n", containerName)
+	}
 
 	image, err := client.EnsureImage(opts.DockerImageHost, opts.ImageName)
 	if err != nil {
 		return err
 	}
 
-	config := container.Config{
+	containerConfig := container.Config{
 		Image:        image,
 		ExposedPorts: nat.PortSet{},
 	}
@@ -62,7 +67,7 @@ func (client *Client) StartCassandra(opts *StartCassandraOptions) error {
 		if err != nil {
 			return err
 		}
-		config.ExposedPorts[port] = empty
+		containerConfig.ExposedPorts[port] = empty
 		hostConfig.PortBindings[port] = []nat.PortBinding{
 			{HostPort: port.Port()},
 		}
@@ -70,21 +75,19 @@ func (client *Client) StartCassandra(opts *StartCassandraOptions) error {
 
 	networkConfig := network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{
-			"stargate": {NetworkID: "stargate"},
+			"stargate": {NetworkID: opts.ServiceNetworkName},
 		},
 	}
 
-	name := "stargate-cassandra"
-
-	resp, err := cli.ContainerCreate(ctx, &config, &hostConfig, &networkConfig, name)
+	resp, err := cli.ContainerCreate(ctx, &containerConfig, &hostConfig, &networkConfig, containerName)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create container name '%s' from image '%s' because of error from docker '%s'", containerName, opts.ImageName, err)
 	}
 
 	fmt.Println("Starting Cassandra. This might take a minute...")
 	err = cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{})
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to start container '%s' from image '%s' because of error from docker '%s'", containerName, opts.ImageName, err)
 	}
 
 	return client.Started(resp.ID, "Starting listening for CQL clients")

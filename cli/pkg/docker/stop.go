@@ -27,6 +27,5 @@ func (client *Client) Stop(container string) error {
 
 	cli := client.cli
 	ctx := client.ctx
-
-	return cli.ContainerStop(ctx, "stargate-"+container, &t)
+	return cli.ContainerStop(ctx, container, &t)
 }
