@@ -23,11 +23,12 @@ import com.swrve.ratelimitedlogger.RateLimitedLog
 import com.typesafe.scalalogging.LazyLogging
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import stargate.cassandra.CassandraTable
-import stargate.model.{OutputModel, generator, queries}
+import stargate.model.{OutputModel, ScalarComparison, generator, queries}
 import stargate.query.pagination.{StreamEntry, Streams}
 import stargate.service.config.StargateConfig
 import stargate.service.metrics.RequestCollector
 import stargate.{cassandra, query, util}
+
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 import scala.util.Try
@@ -98,10 +99,27 @@ class StargateServlet(
           }
           logger.trace(s"stored query payload is $payload")
           runPredefinedQuery(namespace, queryName, payload, resp)
-        case s"/${namespace}/query/continue/${id}" =>
+        case s"/${namespace}/query/continue/${id}" => {
           logger.trace("matched /:namespace/query/continue/:id")
           continueQuery(namespace, UUID.fromString(id), resp)
-        case s"/${namespace}/query/entity/${entity}" =>
+        }
+        case s"/${namespace}/query/entity/${entity}/${id}" => {
+          logger.trace("matched /:namespace/query/:entity/:id")
+          require(op != "POST", "cannot create entity with id specified in path")
+          http.validateMutation(op, contentLength, maxMutationSize)
+          val payload = new String(req.getInputStream.readAllBytes)
+          logger.trace(s"entity $op payload is $payload")
+          val condition = Map((stargate.keywords.mutation.MATCH, List(stargate.schema.ENTITY_ID_COLUMN_NAME, ScalarComparison.EQ.toString, UUID.fromString(id))))
+          val payloadObj = if(payload.nonEmpty) {
+            http.validateJsonContentHeader(req)
+            util.fromJson(payload).asInstanceOf[Map[String,Object]] ++ condition
+          } else {
+            condition
+          }
+          logger.trace(s"entity converts to $payloadObj")
+          runQuery(namespace, entity, op, payloadObj , resp)
+        }
+        case s"/${namespace}/query/entity/${entity}" => {
           logger.trace("matched /:namespace/query/:entity/")
           http.validateMutation(op, contentLength, maxMutationSize)
           val isSwagger = contentLength < 1L
@@ -116,10 +134,11 @@ class StargateServlet(
           logger.trace(s"entity $op payload is $payload")
           val payloadObj = util.fromJson(payload)
           logger.trace(s"entity converts to $payloadObj")
-          runQuery(namespace, entity, op, payloadObj , resp)
+          runQuery(namespace, entity, op, payloadObj, resp)
+        }
         case _ =>
           resp.setStatus(HttpServletResponse.SC_NOT_FOUND)
-          val msg = s"path: $path does not match /:namespace/:entity/:id pattern"
+          val msg = s"invalid path: $path, see swagger api-docs for available endpoints: /${StargateApiVersion}/api-docs/:namespace/swagger"
           rateLimitedLog.warn(msg)
           resp.getWriter.write(util.toJson(msg))
       }

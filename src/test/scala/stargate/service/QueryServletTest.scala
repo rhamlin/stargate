@@ -18,8 +18,10 @@ package stargate.service
 import java.net.http.HttpRequest.BodyPublishers
 import java.net.http.HttpResponse.BodyHandlers
 import java.net.http.{HttpClient, HttpRequest}
+import java.util.UUID
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.LazyLogging
 import org.hamcrest.CoreMatchers._
 import org.junit.Assert._
@@ -275,5 +277,36 @@ trait QueryServletTest extends HttpClientTestTrait with LazyLogging {
     assertEquals(response.headers().firstValue("Content-Type").get, "application/json")
     logger.info(s"show body for named query response $responseBody")
     assertEquals(responseBody.get(0).get("firstName"), "Steve")
+  }
+
+  @Test
+  def testEntityById(): Unit = {
+    val queryUrl = wrap(s"${StargateApiVersion}/api/${sc.namespace}/query/entity/${sc.entity}")
+    val getQuery = """{"-match":"all"}"""
+    val getAllRequest = HttpRequest.newBuilder()
+      .uri(queryUrl.toJavaUri)
+      .method("GET", BodyPublishers.ofString(getQuery))
+      .header("Content-Type", "application/json")
+      .build()
+    val response = HttpClient.newHttpClient()
+      .send(getAllRequest, BodyHandlers.ofString())
+    val all = ConfigFactory.parseString("list: " + response.body)
+    println(all)
+    val uuid = UUID.fromString(all.getConfigList("list").get(0).getString("entityId"))
+
+    def get(): Config = ConfigFactory.parseString("list: " + quickRequest
+      .get(wrap(s"${StargateApiVersion}/api/${sc.namespace}/query/entity/${sc.entity}/${uuid}"))
+      .send().body)
+    assert(get().getConfigList("list").get(0) == all.getConfigList("list").get(0))
+    val update = quickRequest
+      .put(wrap(s"${StargateApiVersion}/api/${sc.namespace}/query/entity/${sc.entity}/${uuid}"))
+      .contentType("application/json")
+      .body("""{"firstName":"asdf"}""".stripMargin)
+      .send()
+    assert(get().getConfigList("list").get(0) != all.getConfigList("list").get(0))
+    val delete = quickRequest
+      .delete(wrap(s"${StargateApiVersion}/api/${sc.namespace}/query/entity/${sc.entity}/${uuid}"))
+      .send()
+    assert(get().getConfigList("list").isEmpty)
   }
 }
