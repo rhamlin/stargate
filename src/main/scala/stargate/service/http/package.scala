@@ -41,22 +41,65 @@ package object http {
 
   val hoconType = "application/hocon"
   val jsonType = "application/json"
+  val jsonTypeEncoding = "charset=utf-8"
   val pathRegex: Pattern = Pattern.compile("//")
 
+  /**
+    *
+    * helper method for servlet calls validateHoconContentType
+    * @param req from an http servlet
+    */
   def validateHoconHeader(req: HttpServletRequest): Unit = {
     val contentType = req.getContentType
-    if (contentType != hoconType) {
+    validateHoconContentType(contentType)
+  }
+
+  /**
+    *
+    * accepts any case of 
+    * application/hocon
+    * @param contentType content-type from an http request header
+    */
+  def validateHoconContentType(contentType: String): Unit = {
+    if (contentType == null ){
+      throw new InvalidContentTypeException(hoconType, contentType)
+    }
+    if (contentType.toLowerCase() != hoconType) {
       throw new InvalidContentTypeException(hoconType, contentType)
     }
   }
 
+  /**
+    * helper method for servlet calls validateJsonContentType
+    * @param req from an http servlet
+    */
   def validateJsonContentHeader(req: HttpServletRequest) : Unit = {
-    // TODO: temporarily removing this check because it doesnt account for formats like application/json;charset=UTF-8
-    //       need to find a library to handle this properly
-    //val contentType = req.getContentType
-    //if (contentType != jsonType){
-    //  throw InvalidContentTypeException(jsonType, contentType)
-    //}
+    val contentType = req.getContentType
+    validateJsonContentType(contentType)
+  }
+
+  /**
+    * accepts any case of 
+    * application/json
+    * application/json;charset=utf-8 
+    * application/json; charset=utf-8 
+    *
+    * @param contentType content-type from an http request header
+    */
+  def validateJsonContentType(contentType: String): Unit = {
+    if (contentType == null){
+      throw InvalidContentTypeException(jsonType, contentType)
+    }
+    val tokens = contentType.toLowerCase().split(";")
+    if (tokens.length == 1){
+      if (tokens(0).trim() != jsonType){
+        throw InvalidContentTypeException(jsonType, contentType)
+      }
+    } else {
+      if (tokens(0).trim() != jsonType && tokens(1).trim() != jsonTypeEncoding){
+        throw InvalidContentTypeException(jsonType, contentType)
+      }
+    }
   }
 
   /**
@@ -68,7 +111,8 @@ package object http {
   def sanitizePath(path: String): String = {
     pathRegex.matcher(path).replaceAll("/")
   }
+
+  case class InvalidContentTypeException(expectedContentType: String, contentType: String)
+  extends Exception(s"Expected $expectedContentType but was $contentType"){}
 }
 
-case class InvalidContentTypeException(expectedContentType: String, contentType: String)
-  extends Exception(s"Expected $expectedContentType but was $contentType"){}
