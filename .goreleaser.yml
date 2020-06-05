@@ -17,7 +17,7 @@ builds:
     - 386
     - amd64
   ldflags: 
-    -s -w -X main.defaultSGVersion={{.Env.SG_TAG}}
+    -s -w -X main.defaultSGVersion={{ .Tag }}
 archives:
 - replacements:
     darwin: Darwin
