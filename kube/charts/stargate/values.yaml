@@ -41,6 +41,12 @@ stargate:
   cassandraContactPoints: "cassandra-0.cassandra.default.svc.cluster.local:9042"
   #datacetenter to connect to
   cassandraDataCenter: datacenter1
+  #username to log into cassandra
+  cassandraAuthUser: mypass
+  #password to log into cassandra
+  cassandraAuthPass: myuser
+  #auth provider to use
+  cassandraAuthProvider: PlainTextAuthProvider
   #number of replicas to use in cassandra for all newly created apps
   cassandraReplicationFactor: 1
   #auth is enabled by default with helm deploy

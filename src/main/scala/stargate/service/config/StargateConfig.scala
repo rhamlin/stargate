@@ -68,8 +68,8 @@ object StargateConfig {
       config.getInt("defaultTTL"),
       config.getInt("defaultLimit"),
       config.getLong("validation.maxSchemaSizeKB"),
-      config.getLong("validation.maxMutationSizeKB"),
       config.getLong("validation.maxRequestSizeKB"),
+      config.getLong("validation.maxMutationSizeKB"),
       config.getString("stargateKeyspace"),
       CassandraClientConfig.parse(config.getConfig("cassandra")),
       AuthConfig.parse(config.getConfig("auth"))

@@ -26,15 +26,14 @@ import com.typesafe.config.Config
   * @param cassandraReplication number of copies of data stored (ie RF 1 means there is only a single copy of all data and losing it means losing that data permanently)
   * @param cassandraAuthProvider custom auth provider to use for Apache Cassandra. See https://docs.datastax.com/en/developer/java-driver/4.6/manual/core/authentication/ for more details
   * @param cassandraUserName when using the PlainTextProvider the user name to use to connect to Apache Cassandra
-  * @param cassandraPassword when using the PlainTextProvider the password to use to connect to Apache Cassandra
-  */
+  * @param cassandraPassword when using the PlainTextAuthProvider the password to use to connect to Apache Cassandra */
 case class CassandraClientConfig(
   @BeanProperty val cassandraContactPoints: List[(String, Int)],
   @BeanProperty val cassandraDataCenter: String = DEFAULT_DATACENTER,
   @BeanProperty val cassandraReplication: Int = DEFAULT_REPLICATION,
-  @BeanProperty val cassandraAuthProvider: String = DEFAULT_AUTH_PROVIDER,
   @BeanProperty val cassandraUserName: String = DEFAULT_USERNAME,
-  @BeanProperty val cassandraPassword: String = DEFAULT_PASSWORD)
+  @BeanProperty val cassandraPassword: String = DEFAULT_PASSWORD,
+  @BeanProperty val cassandraAuthProvider: String = DEFAULT_AUTH_PROVIDER)
 
 
 object CassandraClientConfig {

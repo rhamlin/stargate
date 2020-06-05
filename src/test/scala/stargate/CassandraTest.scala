@@ -62,7 +62,7 @@ trait CassandraTest extends LazyLogging {
   }
 
   def clientConfig: CassandraClientConfig = {
-    CassandraClientConfig(List(("localhost", cqlPort)), dataCenter, 1, "PlainTextAuthProvider", "cassandra", "cassandra")
+    CassandraClientConfig(List(("localhost", cqlPort)), dataCenter, 1, "cassandra", "cassandra", "PlainTextAuthProvider")
   }
 
   def newKeyspace(): String = {
