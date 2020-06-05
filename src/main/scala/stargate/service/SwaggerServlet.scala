@@ -118,7 +118,6 @@ def route(request: HttpServletRequest, response: HttpServletResponse): Unit = {
   }
 
   override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
-    super.getServletContext
     route(req, resp)
   }
 

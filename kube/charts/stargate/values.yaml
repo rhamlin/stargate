@@ -43,6 +43,14 @@ stargate:
   cassandraDataCenter: datacenter1
   #number of replicas to use in cassandra for all newly created apps
   cassandraReplicationFactor: 1
+  #auth is enabled by default with helm deploy
+  authEnabled: true
+  #authUser is the username to use
+  authUser: admin
+  #bcrypt hashed password sgAdmin1234
+  #generate a new one by using the following at a command prompt (but change <Password> to your password)
+  #htpasswd -bnBC 10 "usr" <Password> | cut -d ':' -f 2 | sed 's/2y/2a/'
+  authPasswordHash: $2a$12$E3tbBnSsZInKlehcUt2DIuaH9XcXvzXmOozQKgai2iZlvzRQ93nHS
 
 serviceAccount:
   create: false

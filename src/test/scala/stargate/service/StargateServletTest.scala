@@ -22,7 +22,7 @@ import java.net.http.{HttpClient, HttpRequest}
 import org.junit.Assert._
 import org.junit.Test
 import stargate.KeyspaceRegistry
-import sttp.client._
+import stargate.service.testsupport._
 
 import scala.io.Source
 
@@ -31,64 +31,42 @@ trait StargateServletTest extends HttpClientTestTrait with KeyspaceRegistry {
   @Test
   def testNamespaceCreate(): Unit = {
     val newNamespace = this.registerKeyspace(s"testCreate${sc.rand.nextInt(2000)}")
-    val r = quickRequest
-      .post(wrap(s"${StargateApiVersion}/api/${newNamespace}/schema"))
-      .contentType("application/hocon")
-      .body(Source.fromResource("schema.conf").getLines().mkString("\n"))
-      .send()
-    assertEquals(Ok, r.code)
+    var r = httpPost(wrap(s"${StargateApiVersion}/api/${newNamespace}/schema"),
+      "application/hocon",
+      Source.fromResource("schema.conf").getLines().mkString("\n"))
+    assertEquals(200, r.statusCode)
     assertTrue(r.contentType.isDefined)
     assertEquals("application/json", r.contentType.get)
 
     val getQuery = """{"-match":["firstName","=", "Steve"]}"""
     val url = wrap(s"${StargateApiVersion}/api/${newNamespace}/query/entity/${sc.entity}")
-    val httpRequest = HttpRequest.newBuilder()
-      .uri(url.toJavaUri)
-      .method("GET", BodyPublishers.ofString(getQuery))
-      .header("Content-Type", "application/json")
-      .build()
+    r = httpGet(url, "application/json", getQuery)
     //validate I can hit the end point even if there are no results
-    val statusCode = HttpClient.newHttpClient()
-      .send(httpRequest, BodyHandlers.ofString()).statusCode()
-    assertEquals(statusCode, 200)
+    assertEquals(200, r.statusCode)
   }
 
   @Test
   def testDeleteNamespace(): Unit = {
     val newNamespace = this.registerKeyspace(s"testCreate${sc.rand.nextInt(2000)}")
-    var r = quickRequest
-      .post(wrap(s"${StargateApiVersion}/api/${newNamespace}/schema"))
-      .contentType("application/hocon")
-      .body(Source.fromResource("schema.conf").getLines().mkString("\n"))
-      .send()
-    assertEquals(Ok, r.code)
-    r = quickRequest
-      .delete(wrap(s"${StargateApiVersion}/api/${newNamespace}/schema"))
-      .contentType(ApplicationJson)
-      .send()
-    assertEquals(Ok, r.code)
+    var r = httpPost(wrap(s"${StargateApiVersion}/api/${newNamespace}/schema"), "application/hocon", Source.fromResource("schema.conf").getLines().mkString("\n"))
+    assertEquals("uanble to post schema", 200, r.statusCode)
+    r = httpDelete(wrap(s"${StargateApiVersion}/api/${newNamespace}/schema"), "application/json", "")
+    assertEquals("unable to delete namespace", 200, r.statusCode)
 
+    //validate there is no endpoint to hit
     val getQuery = """{"-match":["firstName","=", "Steve"]}"""
     val url = wrap(s"${StargateApiVersion}/api/${newNamespace}/query/entity/${sc.entity}")
-    val httpRequest = HttpRequest.newBuilder()
-      .uri(url.toJavaUri)
-      .method("GET", BodyPublishers.ofString(getQuery))
-      .header("Content-Type", "application/json")
-      .build()
-    //validate there is no endpoint to hit
-    val statusCode = HttpClient.newHttpClient()
-      .send(httpRequest, BodyHandlers.ofString()).statusCode()
+    r = httpGet(url, "application/json", getQuery)
     //should get bad gateway with missing namespace
-    assertEquals(502, statusCode )
+    assertEquals("unexpected successed, endpoint was deleted and this should fail", 502, r.statusCode )
   }
 
   @Test
   def testValidateSchema(): Unit = {
-    val r = basicRequest
-      .post(wrap(s"${StargateApiVersion}/api/validate"))
-      .contentType("application/hocon")
-      .body(Source.fromResource("schema.conf").getLines().mkString("\n"))
-      .send()
-    assertEquals(Ok, r.code)
+    val r = httpPost(
+      wrap(s"${StargateApiVersion}/api/validate"),
+      "application/hocon",
+      Source.fromResource("schema.conf").getLines().mkString("\n"))
+    assertEquals(200, r.statusCode)
   }
 }

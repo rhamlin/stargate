@@ -18,7 +18,7 @@
 
     <groupId>datastax</groupId>
     <artifactId>stargate</artifactId>
-    <version>0.2.0-SNAPSHOT</version>
+    <version>0.2.0</version>
     <packaging>jar</packaging>
 
     <name>stargate</name>
@@ -186,6 +186,11 @@
     </build>
     <dependencies>
         <dependency>
+            <groupId>at.favre.lib</groupId>
+            <artifactId>bcrypt</artifactId>
+            <version>0.9.0</version>
+          </dependency>
+        <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
             <version>2.10.4</version>
@@ -244,11 +249,6 @@
             <groupId>io.prometheus</groupId>
             <artifactId>simpleclient_logback</artifactId>
             <version>${prometheus.simpleclient.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.softwaremill.sttp.client</groupId>
-            <artifactId>core_2.13</artifactId>
-            <version>2.1.4</version>
         </dependency>
         <dependency>
             <groupId>com.typesafe</groupId>

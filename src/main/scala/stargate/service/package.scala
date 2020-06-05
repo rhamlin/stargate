@@ -13,6 +13,10 @@ import io.prometheus.client.hotspot.DefaultExports
 import stargate.service.config.StargateConfig
 import org.eclipse.jetty.servlet.ServletHolder
 import scala.reflect.api.Names
+import javax.servlet.DispatcherType
+import java.{util => ju}
+import org.eclipse.jetty.servlet.FilterHolder
+import stargate.service.security.BasicAuthFilter
 
 package object service {
   private val logger = Logger("stargage.service")
@@ -51,6 +55,10 @@ package object service {
     logger.info("============  ")
     logger.info(s"""StarGate Version: ${stargate.service.StargateVersion}""")
   }
+
+  var registeredJettyMetrics = false
+  var stats: StatisticsHandler = _
+
   /**
     * strictly in here for testing
     */
@@ -64,19 +72,26 @@ package object service {
     val context = new WebAppContext()
     context setContextPath "/"
     context.setResourceBase("src/main/webapp")
+    if (sgConfig.auth.enabled){
+      context.addFilter(new FilterHolder(new BasicAuthFilter(sgConfig.auth)), "/*" ,  ju.EnumSet.of(DispatcherType.INCLUDE,DispatcherType.REQUEST))
+    }
     context.addServlet(new ServletHolder(new StargateServlet(sgConfig, cqlSession, namespaces, datamodelRepoTable, executor)), s"/${StargateApiVersion}/api/*")
     context.addServlet(new ServletHolder(new SwaggerServlet(namespaces, sgConfig)),"/api-docs/*")
     context.addServlet(classOf[DefaultServlet], "/")
      
     server.setHandler(context)
+    //supposedly this can be run multiple times, but we are able to trigger this breaking in test
     DefaultExports.initialize()
-    val stats = new StatisticsHandler()
-    //get current server handler and set it inside StatisticsHandler
-    stats.setHandler(server.getHandler)
-    //set StatisticsHandler as the handler for servlet
-    server.setHandler(stats)
-    // Register collector.
-    new JettyStatisticsCollector(stats).register()
+    if (!registeredJettyMetrics){
+      stats = new StatisticsHandler()
+      //get current server handler and set it inside StatisticsHandler
+      stats.setHandler(server.getHandler)
+      //set StatisticsHandler as the handler for servlet
+      server.setHandler(stats)
+      new JettyStatisticsCollector(stats).register()
+      // Register collector.
+      registeredJettyMetrics = true
+    }
 
     logStartup()
     server.start

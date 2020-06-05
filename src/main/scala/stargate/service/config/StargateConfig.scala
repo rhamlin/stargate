@@ -19,7 +19,6 @@ import com.typesafe.config.Config
 
 import scala.beans.BeanProperty
 
-
 /**
   * the parsed combination of stargate-docker.conf and defaults.conf
   *
@@ -30,16 +29,19 @@ import scala.beans.BeanProperty
   * @param maxRequestSizeKB max allowed request size in KB for all http requests
   * @param maxMutationSizeKB max allowed mutation size in KB for all create entity requests ${namespace}/query/entitity/${entityName}/ POST
   * @param stargateKeyspace cassandra keyspace for persisting stargate's internal state (e.g. active schemas)
+  * @param cassandra provides the Apache Cassandra client configuration
+  * @param auth provides the server authentication configuration
   */
 final case class StargateConfig(
-  @BeanProperty val httpPort: Int,
-  @BeanProperty val defaultTTL: Int,
-  @BeanProperty val defaultLimit: Int,
-  @BeanProperty val maxSchemaSizeKB: Long,
-  @BeanProperty val maxRequestSizeKB: Long,
-  @BeanProperty val maxMutationSizeKB: Long,
-  @BeanProperty val stargateKeyspace: String,
-  @BeanProperty val cassandra: CassandraClientConfig
+    @BeanProperty val httpPort: Int,
+    @BeanProperty val defaultTTL: Int,
+    @BeanProperty val defaultLimit: Int,
+    @BeanProperty val maxSchemaSizeKB: Long,
+    @BeanProperty val maxRequestSizeKB: Long,
+    @BeanProperty val maxMutationSizeKB: Long,
+    @BeanProperty val stargateKeyspace: String,
+    @BeanProperty val cassandra: CassandraClientConfig,
+    @BeanProperty val auth: AuthConfig
 ) {
 
   /**
@@ -69,7 +71,8 @@ object StargateConfig {
       config.getLong("validation.maxMutationSizeKB"),
       config.getLong("validation.maxRequestSizeKB"),
       config.getString("stargateKeyspace"),
-      CassandraClientConfig.parse(config.getConfig("cassandra"))
+      CassandraClientConfig.parse(config.getConfig("cassandra")),
+      AuthConfig.parse(config.getConfig("auth"))
     )
   }
 }

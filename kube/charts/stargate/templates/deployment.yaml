@@ -63,6 +63,20 @@ spec:
               value: {{ .Values.stargate.cassandraDataCenter | quote}}
             - name: SG_CASS_RF
               value: {{ .Values.stargate.cassandraReplicationFactor | quote }}
+            - name: SG_CASS_RF
+              value: {{ .Values.stargate.cassandraReplicationFactor | quote }}
+            - name: SG_CASS_USER
+              value: {{ .Values.stargate.cassandraAuthUser | quote }}
+            - name: SG_CASS_PASS
+              value: {{ .Values.stargate.cassandraAuthPass | quote }}
+            - name: SG_CASS_AUTH_PROVIDER
+              value: {{ .Values.stargate.cassandraAuthProvider | quote }}
+            - name: SG_SERVICE_AUTH_ENABLED
+              value: {{ .Values.stargate.authEnabled | quote }}
+            - name: SG_SERVICE_AUTH_USER
+              value: {{ .Values.stargate.authUser| quote }}
+            - name: SG_SERVICE_AUTH_PASS_HASH
+              value: {{ .Values.stargate.authPasswordHash | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.stargate.port }}

@@ -75,10 +75,9 @@ trait CassandraTest extends LazyLogging {
     this.keyspaces.add(keyspace)
     keyspace
   }
-  private def cleanupKeyspace(keyspace: String) = {
+  private def cleanupKeyspace(keyspace: String): Unit = {
     val wiped = Try(cassandra.wipeKeyspace(cqlSession, keyspace))
     logger.info(s"cleaning up keyspace ${keyspace}: ${wiped.toString}")
-    ()
   }
 
 

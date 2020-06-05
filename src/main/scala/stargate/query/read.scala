@@ -33,7 +33,7 @@ import stargate.cassandra.{CassandraColumn, CassandraTable}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
-// functions used to implement appstax queries
+// functions used to implement stargate queries
 object read {
 
   def appendWhere[T <: OngoingWhereClause[T]](select: T, condition: ScalarCondition[Object]): T = {

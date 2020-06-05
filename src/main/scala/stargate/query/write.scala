@@ -28,7 +28,7 @@ import stargate.model.{OutputModel, ScalarComparison, ScalarCondition}
 import stargate.schema
 
 
-// functions used to implement appstax mutations
+// functions used to implement stargate mutations
 object write {
 
   def insertStatement(keyspace: String, tableName: String, columns: Map[String, Object]): Insert = {

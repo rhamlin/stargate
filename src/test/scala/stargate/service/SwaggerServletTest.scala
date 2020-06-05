@@ -18,38 +18,35 @@ package stargate.service
 import org.hamcrest.CoreMatchers._
 import org.junit.Assert._
 import org.junit.Test
-import sttp.client._
+import stargate.service.testsupport._
 
 trait SwaggerServletTest extends HttpClientTestTrait {
   
   @Test
   def testSwaggerEntityHtmlRenders(): Unit = {
-    val r = quickRequest.get(wrap(s"api-docs/${sc.namespace}/swagger"))
-    .send()
-    assertEquals(Ok, r.code)
+    val r = httpGet(wrap(s"api-docs/${sc.namespace}/swagger"), "text/html", "")
+    assertEquals(200, r.statusCode)
     assertTrue(r.contentType.isDefined)
-    assertEquals(s"${TextHtml};charset=utf-8", r.contentType.get)
-    assertThat("cannot find swagger url", r.body, containsString(s"${sc.namespace}/swagger.json"))
+    assertEquals(s"text/html;charset=utf-8", r.contentType.get)
+    assertThat("cannot find swagger url", r.body.get, containsString(s"${sc.namespace}/swagger.json"))
   }
 
   @Test
   def testSwaggerEntityJsonRenders(): Unit = {
-    val r = quickRequest.get(wrap(s"api-docs/${sc.namespace}/swagger.json"))
-    .send()
-    assertEquals(Ok, r.code)
+    val r = httpGet(wrap(s"api-docs/${sc.namespace}/swagger.json"), "application/json", "")
+    assertEquals(200, r.statusCode)
     assertTrue(r.contentType.isDefined)
-    assertEquals(ApplicationJson.toString(), r.contentType.get)
-    assertThat("namespace missing", r.body, containsString(sc.namespace))
-    assertThat("entity missing", r.body, containsString(sc.entity))
+    assertEquals("application/json", r.contentType.get)
+    assertThat("namespace missing", r.body.get, containsString(sc.namespace))
+    assertThat("entity missing", r.body.get, containsString(sc.entity))
   }
 
   @Test
   def testSwaggerNamespacesRenders(): Unit = {
-    val r = quickRequest.get(wrap("api-docs/swagger"))
-    .send()
-    assertEquals(Ok, r.code)
+    val r = httpGet(wrap(s"api-docs/swagger"), "text/html", "")
+    assertEquals(200, r.statusCode)
     assertTrue(r.contentType.isDefined)
-    assertEquals(s"${TextHtml};charset=utf-8", r.contentType.get)
-    assertThat("cannot find swagger url", r.body, containsString("swagger.json"))
+    assertEquals(s"text/html;charset=utf-8", r.contentType.get)
+    assertThat("cannot find swagger url", r.body.get, containsString("swagger.json"))
   }
 }

@@ -18,7 +18,7 @@ package stargate.service.metrics
 
 import io.prometheus.client.{Counter, Gauge, Histogram}
 
-trait RequestCollector {
+object RequestCollector {
   private val totalRequests: Counter = Counter
     .build()
     .name("total_http_requests")
@@ -60,6 +60,18 @@ trait RequestCollector {
     .name("inprogress_http_requests")
     .help("In progress http requests.")
     .register()
+
+}
+trait RequestCollector {
+  //since traits may happen and be called multiple times and the register function is a global, this can cause problems,
+  //so we've registered the counters in the RequestCollector object and not the trait so that they only happen once
+  private val totalRequests: Counter = RequestCollector.totalRequests
+  private val totalErrors: Counter = RequestCollector.totalErrors
+  private val writeRequestLatency: Histogram = RequestCollector.writeRequestLatency
+  private val readRequestLatency: Histogram = RequestCollector.readRequestLatency
+  private val schemaCreateLatency: Histogram = RequestCollector.schemaCreateLatency
+  private val schemaValidateOnlyLatency: Histogram = RequestCollector.schemaValidateOnlyLatency
+  private val inProgressRequests: Gauge = RequestCollector.inProgressRequests
 
   private def log[A](histo: Histogram, action: () => A): A = {
     totalRequests.inc()
